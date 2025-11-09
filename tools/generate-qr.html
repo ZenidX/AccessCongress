@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Códigos QR - Congreso 2025</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 40px;
+            font-size: 16px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: 30px;
+            margin-top: 10px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .checkbox-item label {
+            margin: 0;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        button {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .qr-result {
+            margin-top: 40px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            text-align: center;
+            display: none;
+        }
+
+        .qr-result.show {
+            display: block;
+        }
+
+        #qrCanvas {
+            margin: 20px auto;
+            display: block;
+            border: 4px solid #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .participant-info {
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            text-align: left;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #666;
+        }
+
+        .info-value {
+            color: #333;
+        }
+
+        .download-btn {
+            margin-top: 20px;
+            background: #4CAF50;
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+        }
+
+        .download-btn:hover {
+            box-shadow: 0 10px 20px rgba(76, 175, 80, 0.3);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .badge.yes {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .badge.no {
+            background: #f44336;
+            color: white;
+        }
+
+        .instructions {
+            background: #e3f2fd;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #2196F3;
+        }
+
+        .instructions h3 {
+            color: #1976D2;
+            margin-bottom: 10px;
+        }
+
+        .instructions ul {
+            margin-left: 20px;
+            color: #555;
+            line-height: 1.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎫 Generador de Códigos QR</h1>
+        <p class="subtitle">Control de Acceso - Congreso 2025</p>
+
+        <div class="instructions">
+            <h3>📋 Instrucciones</h3>
+            <ul>
+                <li>Ingresa los datos del participante inscrito</li>
+                <li>Marca los permisos de acceso correspondientes</li>
+                <li>Genera el código QR</li>
+                <li>Descarga e imprime o envía al participante</li>
+            </ul>
+        </div>
+
+        <form id="qrForm">
+            <div class="form-group">
+                <label for="dni">DNI / Documento de Identidad *</label>
+                <input type="text" id="dni" required placeholder="Ej: 12345678A">
+            </div>
+
+            <div class="form-group">
+                <label for="nombre">Nombre Completo *</label>
+                <input type="text" id="nombre" required placeholder="Ej: Juan Pérez García">
+            </div>
+
+            <div class="form-group">
+                <label>Permisos de Acceso</label>
+                <div class="checkbox-group">
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="aulaMagna" checked disabled>
+                        <label for="aulaMagna">🏛️ Aula Magna (Todos)</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="masterClass">
+                        <label for="masterClass">🎓 Master Class</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="cena">
+                        <label for="cena">🍽️ Cena</label>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit">Generar Código QR</button>
+        </form>
+
+        <div id="qrResult" class="qr-result">
+            <h2>Código QR Generado</h2>
+            <canvas id="qrCanvas"></canvas>
+
+            <div class="participant-info">
+                <div class="info-row">
+                    <span class="info-label">DNI:</span>
+                    <span class="info-value" id="displayDni"></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Nombre:</span>
+                    <span class="info-value" id="displayNombre"></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Aula Magna:</span>
+                    <span class="info-value">
+                        <span class="badge yes">SÍ</span>
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Master Class:</span>
+                    <span class="info-value" id="displayMasterClass"></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Cena:</span>
+                    <span class="info-value" id="displayCena"></span>
+                </div>
+            </div>
+
+            <button class="download-btn" onclick="downloadQR()">
+                📥 Descargar QR
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let currentQRData = null;
+
+        document.getElementById('qrForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const dni = document.getElementById('dni').value.trim();
+            const nombre = document.getElementById('nombre').value.trim();
+            const masterClass = document.getElementById('masterClass').checked;
+            const cena = document.getElementById('cena').checked;
+
+            if (!dni || !nombre) {
+                alert('Por favor completa todos los campos obligatorios');
+                return;
+            }
+
+            // Crear objeto JSON para el QR
+            const qrData = {
+                dni: dni,
+                nombre: nombre,
+                permisos: {
+                    aula_magna: true,  // Todos tienen acceso
+                    master_class: masterClass,
+                    cena: cena
+                }
+            };
+
+            currentQRData = qrData;
+
+            // Generar QR
+            const canvas = document.getElementById('qrCanvas');
+            QRCode.toCanvas(canvas, JSON.stringify(qrData), {
+                width: 300,
+                margin: 2,
+                color: {
+                    dark: '#000000',
+                    light: '#ffffff'
+                }
+            }, function(error) {
+                if (error) {
+                    console.error(error);
+                    alert('Error al generar el código QR');
+                    return;
+                }
+
+                // Mostrar información
+                document.getElementById('displayDni').textContent = dni;
+                document.getElementById('displayNombre').textContent = nombre;
+                document.getElementById('displayMasterClass').innerHTML =
+                    `<span class="badge ${masterClass ? 'yes' : 'no'}">${masterClass ? 'SÍ' : 'NO'}</span>`;
+                document.getElementById('displayCena').innerHTML =
+                    `<span class="badge ${cena ? 'yes' : 'no'}">${cena ? 'SÍ' : 'NO'}</span>`;
+
+                // Mostrar resultado
+                document.getElementById('qrResult').classList.add('show');
+
+                // Scroll al resultado
+                document.getElementById('qrResult').scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            });
+        });
+
+        function downloadQR() {
+            if (!currentQRData) return;
+
+            const canvas = document.getElementById('qrCanvas');
+            const url = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = `QR_${currentQRData.dni}_${currentQRData.nombre.replace(/\s+/g, '_')}.png`;
+            link.href = url;
+            link.click();
+        }
+    </script>
+</body>
+</html>
