@@ -1,0 +1,241 @@
+# =====================================
+# QUERIES - Consultas de lectura
+# =====================================
+
+# Obtener un participante por DNI
+query GetParticipantByDNI($dni: String!) @auth(level: USER) {
+  participant(key: {dni: $dni}) {
+    dni
+    nombre
+    permisos {
+      aula_magna
+      master_class
+      cena
+    }
+    estado {
+      registrado
+      en_aula_magna
+      en_master_class
+      en_cena
+    }
+    timestamp_registro
+    ultima_actualizacion
+  }
+}
+
+# Listar todos los participantes
+query ListAllParticipants @auth(level: USER) {
+  participants {
+    dni
+    nombre
+    permisos {
+      aula_magna
+      master_class
+      cena
+    }
+    estado {
+      registrado
+      en_aula_magna
+      en_master_class
+      en_cena
+    }
+    timestamp_registro
+    ultima_actualizacion
+  }
+}
+
+# Listar participantes registrados
+query ListRegisteredParticipants @auth(level: USER) {
+  participants(where: {estado: {registrado: {eq: true}}}) {
+    dni
+    nombre
+    permisos {
+      aula_magna
+      master_class
+      cena
+    }
+    estado {
+      registrado
+      en_aula_magna
+      en_master_class
+      en_cena
+    }
+    timestamp_registro
+    ultima_actualizacion
+  }
+}
+
+# Listar participantes en Aula Magna
+query ListParticipantsInAulaMagna @auth(level: USER) {
+  participants(where: {estado: {en_aula_magna: {eq: true}}}) {
+    dni
+    nombre
+    timestamp_registro
+    ultima_actualizacion
+  }
+}
+
+# Listar participantes en Master Class
+query ListParticipantsInMasterClass @auth(level: USER) {
+  participants(where: {estado: {en_master_class: {eq: true}}}) {
+    dni
+    nombre
+    timestamp_registro
+    ultima_actualizacion
+  }
+}
+
+# Listar participantes en Cena
+query ListParticipantsInCena @auth(level: USER) {
+  participants(where: {estado: {en_cena: {eq: true}}}) {
+    dni
+    nombre
+    timestamp_registro
+    ultima_actualizacion
+  }
+}
+
+# Obtener logs de acceso de un participante
+query GetAccessLogsByDNI($dni: String!) @auth(level: USER) {
+  accessLogs(where: {dni: {eq: $dni}}, orderBy: {timestamp: DESC}) {
+    dni
+    nombre
+    modo
+    direccion
+    timestamp
+    operador
+    exito
+    mensaje
+  }
+}
+
+# Listar todos los logs de acceso (con límite)
+query ListRecentAccessLogs($limit: Int) @auth(level: USER) {
+  accessLogs(orderBy: {timestamp: DESC}, limit: $limit) {
+    dni
+    nombre
+    modo
+    direccion
+    timestamp
+    operador
+    exito
+    mensaje
+  }
+}
+
+# Contar participantes por ubicación
+query GetLocationStats @auth(level: USER) {
+  registrados: participants(where: {estado: {registrado: {eq: true}}}) {
+    dni
+  }
+  en_aula_magna: participants(where: {estado: {en_aula_magna: {eq: true}}}) {
+    dni
+  }
+  en_master_class: participants(where: {estado: {en_master_class: {eq: true}}}) {
+    dni
+  }
+  en_cena: participants(where: {estado: {en_cena: {eq: true}}}) {
+    dni
+  }
+}
+
+# =====================================
+# MUTATIONS - Operaciones de escritura
+# =====================================
+
+# Registrar un nuevo participante
+mutation RegisterParticipant(
+  $dni: String!,
+  $nombre: String!,
+  $aula_magna: Boolean!,
+  $master_class: Boolean!,
+  $cena: Boolean!,
+  $timestamp: Int!
+) @auth(level: USER) {
+  participant_upsert(
+    key: {dni: $dni},
+    data: {
+      dni: $dni,
+      nombre: $nombre,
+      permisos: {
+        aula_magna: $aula_magna,
+        master_class: $master_class,
+        cena: $cena
+      },
+      estado: {
+        registrado: true,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: $timestamp,
+      ultima_actualizacion: $timestamp
+    }
+  )
+}
+
+# Actualizar estado de un participante (entrada/salida de ubicación)
+mutation UpdateParticipantStatus(
+  $dni: String!,
+  $en_aula_magna: Boolean!,
+  $en_master_class: Boolean!,
+  $en_cena: Boolean!,
+  $timestamp: Int!
+) @auth(level: USER) {
+  participant_update(
+    key: {dni: $dni},
+    data: {
+      estado: {
+        registrado: true,
+        en_aula_magna: $en_aula_magna,
+        en_master_class: $en_master_class,
+        en_cena: $en_cena
+      },
+      ultima_actualizacion: $timestamp
+    }
+  )
+}
+
+# Actualizar permisos de un participante
+mutation UpdateParticipantPermissions(
+  $dni: String!,
+  $aula_magna: Boolean!,
+  $master_class: Boolean!,
+  $cena: Boolean!,
+  $timestamp: Int!
+) @auth(level: USER) {
+  participant_update(
+    key: {dni: $dni},
+    data: {
+      permisos: {
+        aula_magna: $aula_magna,
+        master_class: $master_class,
+        cena: $cena
+      },
+      ultima_actualizacion: $timestamp
+    }
+  )
+}
+
+# Registrar un log de acceso
+mutation LogAccessAttempt(
+  $dni: String!,
+  $nombre: String!,
+  $modo: String!,
+  $direccion: String,
+  $timestamp: Int!,
+  $operador: String,
+  $exito: Boolean!,
+  $mensaje: String
+) @auth(level: USER) {
+  accessLog_insert(data: {
+    dni: $dni,
+    nombre: $nombre,
+    modo: $modo,
+    direccion: $direccion,
+    timestamp: $timestamp,
+    operador: $operador,
+    exito: $exito,
+    mensaje: $mensaje
+  })
+}

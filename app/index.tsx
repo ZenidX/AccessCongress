@@ -1,5 +1,9 @@
 /**
- * Pantalla principal - Selección de modo de control
+ * Pantalla principal - Home
+ *
+ * Pantalla de bienvenida simple con acceso directo a:
+ * - Dashboard: Monitoreo en tiempo real de asistentes
+ * - Administración: Gestión de participantes y configuración
  */
 
 import React from 'react';
@@ -8,184 +12,115 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
-  Alert,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
-import { useApp } from '@/contexts/AppContext';
-import { AccessMode, AccessDirection } from '@/types/participant';
-import { Colors } from '@/constants/theme';
+import { Colors, BorderRadius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-
-interface ModeOption {
-  modo: AccessMode;
-  titulo: string;
-  descripcion: string;
-  icono: string;
-  color: string;
-}
-
-const MODOS: ModeOption[] = [
-  {
-    modo: 'registro',
-    titulo: 'Registro Inicial',
-    descripcion: 'Registro de participantes al inicio del congreso',
-    icono: '📝',
-    color: '#4CAF50',
-  },
-  {
-    modo: 'aula_magna',
-    titulo: 'Aula Magna',
-    descripcion: 'Control de acceso al aula magna',
-    icono: '🏛️',
-    color: '#2196F3',
-  },
-  {
-    modo: 'master_class',
-    titulo: 'Master Class',
-    descripcion: 'Control de acceso a la master class',
-    icono: '🎓',
-    color: '#FF9800',
-  },
-  {
-    modo: 'cena',
-    titulo: 'Cena de Clausura',
-    descripcion: 'Control de acceso a la cena',
-    icono: '🍽️',
-    color: '#9C27B0',
-  },
-];
 
 export default function HomeScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const { setModo, setDireccion, direccion } = useApp();
 
-  const handleSelectMode = (modo: AccessMode) => {
-    setModo(modo);
-
-    // El modo registro no tiene entrada/salida
-    if (modo === 'registro') {
-      setDireccion('entrada');
-      router.push('/scanner');
-    } else {
-      // Mostrar selector de entrada/salida
-      Alert.alert(
-        'Tipo de acceso',
-        'Selecciona el tipo de control:',
-        [
-          {
-            text: 'Entrada',
-            onPress: () => {
-              setDireccion('entrada');
-              router.push('/scanner');
-            },
-          },
-          {
-            text: 'Salida',
-            onPress: () => {
-              setDireccion('salida');
-              router.push('/scanner');
-            },
-          },
-          {
-            text: 'Cancelar',
-            style: 'cancel',
-          },
-        ]
-      );
-    }
-  };
-
+  /**
+   * Navega a la pantalla del Dashboard en tiempo real
+   */
   const handleGoToDashboard = () => {
     router.push('/dashboard');
   };
 
+  /**
+   * Navega a la pantalla de Administración
+   */
   const handleGoToAdmin = () => {
     router.push('/admin');
   };
 
   return (
     <ThemedView style={styles.container}>
+      {/* Header con logo de Impuls Educació y título */}
       <View style={styles.header}>
+        <Image
+          source={{ uri: 'https://impulseducacio.org/wp-content/uploads/2020/02/logo-web-impuls.png' }}
+          style={styles.logo}
+          resizeMode="contain"
+        />
         <ThemedText style={styles.title}>Control de Acceso</ThemedText>
         <ThemedText style={styles.subtitle}>Congreso 2025</ThemedText>
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        <ThemedText style={styles.sectionTitle}>Selecciona el modo de control:</ThemedText>
+      {/* Contenido principal */}
+      <View style={styles.content}>
+        <ThemedText style={styles.welcomeText}>
+          Bienvenido al sistema de control de acceso
+        </ThemedText>
 
-        {MODOS.map((modoOption) => (
-          <TouchableOpacity
-            key={modoOption.modo}
-            style={[
-              styles.modeCard,
-              {
-                backgroundColor:
-                  colorScheme === 'dark'
-                    ? 'rgba(255,255,255,0.1)'
-                    : 'rgba(0,0,0,0.05)',
-                borderLeftColor: modoOption.color,
-              },
-            ]}
-            onPress={() => handleSelectMode(modoOption.modo)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.modeIconContainer}>
-              <Text style={styles.modeIcon}>{modoOption.icono}</Text>
-            </View>
-            <View style={styles.modeTextContainer}>
-              <ThemedText style={styles.modeTitle}>{modoOption.titulo}</ThemedText>
-              <ThemedText style={styles.modeDescription}>
-                {modoOption.descripcion}
-              </ThemedText>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
-        ))}
-
-        <View style={styles.actionButtons}>
+        {/* Botones principales */}
+        <View style={styles.mainButtons}>
+          {/* Botón Dashboard */}
           <TouchableOpacity
             style={[
-              styles.actionButton,
+              styles.mainButton,
+              Shadows.strong,
               {
                 backgroundColor:
-                  colorScheme === 'dark' ? Colors.dark.tint : Colors.light.tint,
+                  colorScheme === 'dark' ? Colors.dark.primary : Colors.light.primary,
               },
             ]}
             onPress={handleGoToDashboard}
+            activeOpacity={0.8}
           >
-            <Text style={styles.actionButtonText}>📊 Ver Dashboard</Text>
+            <Text style={styles.mainButtonIcon}>📊</Text>
+            <Text style={styles.mainButtonText}>Dashboard</Text>
+            <Text style={styles.mainButtonDescription}>
+              Monitoreo en tiempo real de asistentes
+            </Text>
           </TouchableOpacity>
 
+          {/* Botón Administración */}
           <TouchableOpacity
             style={[
-              styles.actionButton,
+              styles.mainButton,
+              Shadows.strong,
               {
-                backgroundColor: '#666',
+                backgroundColor: colorScheme === 'dark' ? Colors.dark.accent : Colors.light.accent,
               },
             ]}
             onPress={handleGoToAdmin}
+            activeOpacity={0.8}
           >
-            <Text style={styles.actionButtonText}>⚙️ Administración</Text>
+            <Text style={styles.mainButtonIcon}>⚙️</Text>
+            <Text style={styles.mainButtonText}>Administración</Text>
+            <Text style={styles.mainButtonDescription}>
+              Gestión de participantes y configuración
+            </Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
     </ThemedView>
   );
 }
 
+/**
+ * Estilos de la home
+ * Diseño simple y limpio con botones grandes destacados
+ */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
   header: {
     paddingTop: 60,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     alignItems: 'center',
+  },
+  logo: {
+    width: 200,
+    height: 70,
+    marginBottom: Spacing.lg,
   },
   title: {
     fontSize: 32,
@@ -193,63 +128,45 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   subtitle: {
-    fontSize: 18,
+    fontSize: 20,
     opacity: 0.7,
   },
   content: {
     flex: 1,
+    paddingHorizontal: Spacing.xl,
+    justifyContent: 'center',
+    paddingBottom: 100,
   },
-  contentContainer: {
-    padding: 20,
-  },
-  sectionTitle: {
+  welcomeText: {
     fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 15,
+    textAlign: 'center',
+    marginBottom: Spacing.xxl,
+    opacity: 0.8,
   },
-  modeCard: {
-    flexDirection: 'row',
+  mainButtons: {
+    gap: Spacing.xl,
+  },
+  mainButton: {
+    padding: Spacing.xxl,
+    borderRadius: BorderRadius.lg,
     alignItems: 'center',
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 15,
-    borderLeftWidth: 5,
+    minHeight: 160,
+    justifyContent: 'center',
   },
-  modeIconContainer: {
-    marginRight: 15,
+  mainButtonIcon: {
+    fontSize: 64,
+    marginBottom: Spacing.md,
   },
-  modeIcon: {
-    fontSize: 40,
-  },
-  modeTextContainer: {
-    flex: 1,
-  },
-  modeTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  modeDescription: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  chevron: {
-    fontSize: 30,
-    opacity: 0.3,
-    marginLeft: 10,
-  },
-  actionButtons: {
-    marginTop: 20,
-    gap: 10,
-  },
-  actionButton: {
-    padding: 18,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  actionButtonText: {
+  mainButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 24,
     fontWeight: 'bold',
+    marginBottom: Spacing.xs,
+  },
+  mainButtonDescription: {
+    color: '#fff',
+    fontSize: 14,
+    opacity: 0.9,
+    textAlign: 'center',
   },
 });

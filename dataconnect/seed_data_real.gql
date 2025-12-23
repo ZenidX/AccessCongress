@@ -1,0 +1,350 @@
+# Datos reales de participantes - Generado automáticamente
+# Total: 95 participantes
+
+mutation ImportRealParticipants @transaction @auth(level: NO_ACCESS) {
+  participant_insertMany(data: [
+    {
+      dni: "JBERRIO1",
+      nombre: "??? Widows Kushner",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "05351392M",
+      nombre: "Aida Vila",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "119527449",
+      nombre: "Ainhoa Vernet Saureu",
+      permisos: {
+        aula_magna: false,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "18234810L",
+      nombre: "Alena Veciana Bové",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "18950618K",
+      nombre: "Alex VALDÉS LLONCH",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "33906173X",
+      nombre: "Alfons Turell Coll",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "35597164H",
+      nombre: "Ana  Tort Fabregat",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "37387960B",
+      nombre: "Ana  TORREJÓN ALMIRALL",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "38125767R",
+      nombre: "Ana  TORICES GRIONS",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "38150048V",
+      nombre: "Ana  Torices Girons",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "38427693Y",
+      nombre: "Andreu Sanjuan",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "38441464T",
+      nombre: "Anna Sanchez Moreno",
+      permisos: {
+        aula_magna: false,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "38443519P",
+      nombre: "Anna Sánchez Araya",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "38560839M",
+      nombre: "Anna Sanabre Romero",
+      permisos: {
+        aula_magna: true,
+        master_class: true,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "38561771V",
+      nombre: "Antoni Sáez Puig",
+      permisos: {
+        aula_magna: false,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "38844367N",
+      nombre: "Antònia Ruiz Segarra",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "39147986P",
+      nombre: "Arantxa Ruiz Ribas",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "39157836Z",
+      nombre: "Ariadna Rubirola Casteyó",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "39157980C",
+      nombre: "Barbara Rovira Garbayo",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    },
+    {
+      dni: "39173295V",
+      nombre: "Bruno Romero  Garcia",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    }
+  ])
+}
+
+# NOTA: Solo se incluyeron los primeros 20 participantes como muestra.
+# Total en el Excel: 95 participantes

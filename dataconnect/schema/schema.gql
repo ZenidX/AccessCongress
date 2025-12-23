@@ -1,0 +1,39 @@
+# Esquema actualizado para AccessCongress - Modelo Firestore
+# Alineado con el modelo de datos actual de la aplicación
+
+# Permisos de acceso del participante a diferentes áreas
+type ParticipantPermissions {
+  aula_magna: Boolean!
+  master_class: Boolean!
+  cena: Boolean!
+}
+
+# Estado actual del participante (ubicaciones)
+type ParticipantStatus {
+  registrado: Boolean!
+  en_aula_magna: Boolean!
+  en_master_class: Boolean!
+  en_cena: Boolean!
+}
+
+# Participante - Entidad principal
+type Participant @table(key: "dni") {
+  dni: String! @col(name: "dni")
+  nombre: String!
+  permisos: ParticipantPermissions!
+  estado: ParticipantStatus!
+  timestamp_registro: Int # Unix timestamp
+  ultima_actualizacion: Int # Unix timestamp
+}
+
+# Registro de acceso - Log de todos los intentos de acceso
+type AccessLog @table {
+  dni: String!
+  nombre: String!
+  modo: String! # "registro" | "aula_magna" | "master_class" | "cena"
+  direccion: String # "entrada" | "salida" | null (para registro)
+  timestamp: Int! # Unix timestamp
+  operador: String # Nombre del operador
+  exito: Boolean! # Si el acceso fue exitoso
+  mensaje: String # Mensaje de validación
+}

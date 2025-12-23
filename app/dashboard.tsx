@@ -1,5 +1,14 @@
 /**
  * Dashboard en tiempo real de asistentes
+ *
+ * Pantalla de monitoreo que muestra en tiempo real:
+ * - Lista de participantes registrados
+ * - Asistentes actuales en cada ubicación (Aula Magna, Master Class, Cena)
+ * - Contador de asistentes por ubicación
+ * - Badges indicando permisos especiales (MC, Cena)
+ *
+ * Usa suscripciones en tiempo real de Firestore para actualizaciones automáticas
+ * cuando un participante entra o sale de una ubicación.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -10,6 +19,8 @@ import {
   TouchableOpacity,
   FlatList,
   RefreshControl,
+  Image,
+  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
@@ -17,10 +28,14 @@ import { ThemedText } from '@/components/themed-text';
 import {
   subscribeToLocationParticipants,
   subscribeToRegisteredParticipants,
+  subscribeToRecentAccessLogs,
+  getAccessStats,
+  getPermissionBasedCounts,
 } from '@/services/participantService';
-import { Participant } from '@/types/participant';
-import { Colors } from '@/constants/theme';
+import { Participant, AccessMode, AccessDirection, AccessLog } from '@/types/participant';
+import { Colors, BorderRadius, Spacing, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useApp } from '@/contexts/AppContext';
 
 type Location = 'registrados' | 'aula_magna' | 'master_class' | 'cena';
 
@@ -36,45 +51,85 @@ const LOCATIONS: LocationInfo[] = [
     key: 'registrados',
     titulo: 'Registrados',
     icono: '📝',
-    color: '#4CAF50',
+    color: Colors.light.modeRegistro,
   },
   {
     key: 'aula_magna',
     titulo: 'Aula Magna',
     icono: '🏛️',
-    color: '#2196F3',
+    color: Colors.light.modeAulaMagna,
   },
   {
     key: 'master_class',
     titulo: 'Master Class',
     icono: '🎓',
-    color: '#FF9800',
+    color: Colors.light.modeMasterClass,
   },
   {
     key: 'cena',
     titulo: 'Cena',
     icono: '🍽️',
-    color: '#9C27B0',
+    color: Colors.light.modeCena,
   },
 ];
 
 export default function DashboardScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const [selectedLocation, setSelectedLocation] = useState<Location>('aula_magna');
+
+  // Contexto global para modo y dirección de escaneo
+  const { setModo, setDireccion } = useApp();
+
+  // Modo/ubicación seleccionado (unificado para escaneo y estadísticas)
+  const [selectedMode, setSelectedMode] = useState<AccessMode>('registro');
+
+  // Lista de participantes en la ubicación seleccionada (actualizada en tiempo real)
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Dirección de escaneo (entrada/salida)
+  const [scanDirection, setScanDirection] = useState<AccessDirection>('entrada');
+
+  // Estado para controlar si el selector de modo está expandido
+  const [modeExpanded, setModeExpanded] = useState(false);
+
+  // Estadísticas del modo seleccionado
+  const [stats, setStats] = useState<{
+    uniqueEntrances: number;
+    maxSimultaneous: number;
+  }>({ uniqueEntrances: 0, maxSimultaneous: 0 });
+
+  // Últimos accesos del modo seleccionado
+  const [recentLogs, setRecentLogs] = useState<AccessLog[]>([]);
+
+  // Recuentos totales de participantes por permiso
+  const [potentialCounts, setPotentialCounts] = useState({
+    registro: 0,
+    aula_magna: 0,
+    master_class: 0,
+    cena: 0,
+  });
+
+  /**
+   * Suscripción en tiempo real a Firestore
+   *
+   * Se actualiza automáticamente cuando cambia selectedMode
+   * Muestra participantes según el modo seleccionado:
+   * - registro: todos los registrados
+   * - aula_magna/master_class/cena: participantes actualmente en esa ubicación
+   */
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
 
-    if (selectedLocation === 'registrados') {
+    if (selectedMode === 'registro') {
+      // Escuchar todos los participantes con estado.registrado = true
       unsubscribe = subscribeToRegisteredParticipants((data) => {
         setParticipants(data);
         setRefreshing(false);
       });
     } else {
-      unsubscribe = subscribeToLocationParticipants(selectedLocation, (data) => {
+      // Escuchar participantes en una ubicación específica
+      unsubscribe = subscribeToLocationParticipants(selectedMode, (data) => {
         setParticipants(data);
         setRefreshing(false);
       });
@@ -83,22 +138,59 @@ export default function DashboardScreen() {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [selectedLocation]);
+  }, [selectedMode]);
+
+  /**
+   * Suscripción a los últimos logs y carga de estadísticas
+   */
+  useEffect(() => {
+    // Suscribirse a los últimos 10 accesos en tiempo real
+    const unsubscribeLogs = subscribeToRecentAccessLogs(selectedMode, 10, (logs) => {
+      setRecentLogs(logs);
+    });
+
+    // Cargar estadísticas
+    getAccessStats(selectedMode).then((stats) => {
+      setStats(stats);
+    });
+
+    return () => {
+      unsubscribeLogs();
+    };
+  }, [selectedMode]);
+
+  /**
+   * Cargar recuentos totales de permisos al montar
+   */
+  useEffect(() => {
+    getPermissionBasedCounts().then(setPotentialCounts);
+  }, []);
 
   const handleRefresh = () => {
     setRefreshing(true);
     // La suscripción en tiempo real se encargará de actualizar
   };
 
+  /**
+   * Abre la cámara para escanear QR
+   * Guarda el modo y dirección en el contexto global antes de navegar
+   */
+  const handleOpenScanner = () => {
+    setModo(selectedMode);
+    setDireccion(scanDirection);
+    router.push('/scanner');
+  };
+
   const renderParticipant = ({ item }: { item: Participant }) => (
     <View
       style={[
         styles.participantCard,
+        colorScheme === 'dark' ? Shadows.light : Shadows.light,
         {
           backgroundColor:
             colorScheme === 'dark'
-              ? 'rgba(255,255,255,0.1)'
-              : 'rgba(0,0,0,0.05)',
+              ? Colors.dark.cardBackground
+              : Colors.light.cardBackground,
         },
       ]}
     >
@@ -109,12 +201,12 @@ export default function DashboardScreen() {
 
       <View style={styles.participantBadges}>
         {item.permisos.master_class && (
-          <View style={[styles.badge, { backgroundColor: '#FF9800' }]}>
+          <View style={[styles.badge, { backgroundColor: Colors.light.modeMasterClass }]}>
             <Text style={styles.badgeText}>MC</Text>
           </View>
         )}
         {item.permisos.cena && (
-          <View style={[styles.badge, { backgroundColor: '#9C27B0' }]}>
+          <View style={[styles.badge, { backgroundColor: Colors.light.modeCena }]}>
             <Text style={styles.badgeText}>Cena</Text>
           </View>
         )}
@@ -122,103 +214,290 @@ export default function DashboardScreen() {
     </View>
   );
 
-  const selectedLocationInfo = LOCATIONS.find((loc) => loc.key === selectedLocation);
+  // Configuración unificada de modos (para escaneo y estadísticas)
+  const MODES = [
+    { key: 'registro' as AccessMode, titulo: 'Registro', icono: '📝', color: Colors.light.modeRegistro },
+    { key: 'aula_magna' as AccessMode, titulo: 'Aula Magna', icono: '🏛️', color: Colors.light.modeAulaMagna },
+    { key: 'master_class' as AccessMode, titulo: 'Master Class', icono: '🎓', color: Colors.light.modeMasterClass },
+    { key: 'cena' as AccessMode, titulo: 'Cena', icono: '🍽️', color: Colors.light.modeCena },
+  ];
+
+  const selectedModeInfo = MODES.find((m) => m.key === selectedMode);
+
+  /**
+   * Maneja la selección de un modo y contrae el selector
+   */
+  const handleModeSelection = (mode: AccessMode) => {
+    setSelectedMode(mode);
+    setModeExpanded(false);
+  };
 
   return (
     <ThemedView style={styles.container}>
-      {/* Selector de ubicación */}
-      <View style={styles.locationSelector}>
-        {LOCATIONS.map((location) => (
-          <TouchableOpacity
-            key={location.key}
-            style={[
-              styles.locationButton,
-              {
-                backgroundColor:
-                  selectedLocation === location.key
-                    ? location.color
-                    : colorScheme === 'dark'
-                    ? 'rgba(255,255,255,0.1)'
-                    : 'rgba(0,0,0,0.1)',
-              },
-            ]}
-            onPress={() => setSelectedLocation(location.key)}
-          >
-            <Text style={styles.locationIcon}>{location.icono}</Text>
-            <Text
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Logo */}
+        <View style={styles.logoContainer}>
+          <Image
+            source={{ uri: 'https://impulseducacio.org/wp-content/uploads/2020/02/logo-web-impuls.png' }}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </View>
+
+        {/* Selector de Modo (unificado para escaneo y estadísticas) */}
+        <View style={styles.modeSection}>
+          <ThemedText style={styles.sectionTitle}>Selecciona el Modo</ThemedText>
+
+          {/* Fila superior: menú hamburguesa + modo seleccionado (siempre visible) */}
+          <View style={styles.modeRowContainer}>
+            {/* Botón de menú hamburguesa */}
+            <TouchableOpacity
               style={[
-                styles.locationText,
+                styles.hamburgerButton,
                 {
-                  color:
-                    selectedLocation === location.key
-                      ? '#fff'
-                      : colorScheme === 'dark'
-                      ? '#fff'
-                      : '#000',
+                  backgroundColor:
+                    colorScheme === 'dark'
+                      ? 'rgba(255,255,255,0.15)'
+                      : 'rgba(0,0,0,0.1)',
                 },
+                Shadows.medium,
+              ]}
+              onPress={() => setModeExpanded(!modeExpanded)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.hamburgerIcon}>{modeExpanded ? '✕' : '☰'}</Text>
+            </TouchableOpacity>
+
+            {/* Modo seleccionado actual */}
+            <View
+              style={[
+                styles.modeSelectorCollapsed,
+                { backgroundColor: selectedModeInfo?.color },
+                Shadows.medium,
               ]}
             >
-              {location.titulo}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text style={styles.modeIconLarge}>{selectedModeInfo?.icono}</Text>
+              <Text style={styles.modeTextLarge}>{selectedModeInfo?.titulo}</Text>
+            </View>
+          </View>
+
+          {/* Opciones de modo (se muestran debajo cuando está expandido) */}
+          {modeExpanded && (
+            <View style={styles.modeSelector}>
+              {MODES.map((mode) => (
+                <TouchableOpacity
+                  key={mode.key}
+                  style={[
+                    styles.modeButton,
+                    {
+                      backgroundColor:
+                        selectedMode === mode.key
+                          ? mode.color
+                          : colorScheme === 'dark'
+                          ? 'rgba(255,255,255,0.1)'
+                          : 'rgba(0,0,0,0.1)',
+                    },
+                  ]}
+                  onPress={() => handleModeSelection(mode.key)}
+                >
+                  <Text style={styles.modeIcon}>{mode.icono}</Text>
+                  <Text
+                    style={[
+                      styles.modeText,
+                      {
+                        color:
+                          selectedMode === mode.key
+                            ? '#fff'
+                            : colorScheme === 'dark'
+                            ? '#fff'
+                            : '#000',
+                      },
+                    ]}
+                  >
+                    {mode.titulo}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
+      {/* Controles de Escaneo */}
+      <View style={styles.scanControls}>
+        {/* Selector de dirección (solo si no es registro) */}
+        {selectedMode !== 'registro' && (
+          <View style={styles.directionSelector}>
+            <TouchableOpacity
+              style={[
+                styles.directionButton,
+                scanDirection === 'entrada' && styles.directionButtonActive,
+                scanDirection === 'entrada' && { backgroundColor: Colors.light.directionEntrada },
+              ]}
+              onPress={() => setScanDirection('entrada')}
+            >
+              <Text style={[
+                styles.directionButtonText,
+                scanDirection === 'entrada' && styles.directionButtonTextActive
+              ]}>
+                ⬇️ Entrada
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.directionButton,
+                scanDirection === 'salida' && styles.directionButtonActive,
+                scanDirection === 'salida' && { backgroundColor: Colors.light.directionSalida },
+              ]}
+              onPress={() => setScanDirection('salida')}
+            >
+              <Text style={[
+                styles.directionButtonText,
+                scanDirection === 'salida' && styles.directionButtonTextActive
+              ]}>
+                ⬆️ Salida
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Botón para abrir escáner */}
+        <TouchableOpacity
+          style={[
+            styles.scanButton,
+            Shadows.strong,
+            { backgroundColor: selectedModeInfo?.color },
+          ]}
+          onPress={handleOpenScanner}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.scanButtonIcon}>📷</Text>
+          <Text style={styles.scanButtonText}>Escanear QR</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Contador */}
-      <View
-        style={[
-          styles.counterContainer,
-          {
-            backgroundColor: selectedLocationInfo?.color,
-          },
-        ]}
-      >
-        <Text style={styles.counterNumber}>{participants.length}</Text>
-        <Text style={styles.counterLabel}>
-          {participants.length === 1 ? 'Asistente' : 'Asistentes'}
-        </Text>
-      </View>
+      {/* Divider */}
+      <View style={styles.divider} />
 
-      {/* Lista de participantes */}
-      <View style={styles.listContainer}>
-        <ThemedText style={styles.listTitle}>
-          {selectedLocationInfo?.icono} {selectedLocationInfo?.titulo}
+      {/* Estadísticas del modo seleccionado */}
+      <View style={styles.statsSection}>
+        <ThemedText style={styles.sectionTitle}>
+          {selectedModeInfo?.icono} {selectedModeInfo?.titulo}
         </ThemedText>
 
-        {participants.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📭</Text>
-            <ThemedText style={styles.emptyText}>
-              No hay asistentes en esta ubicación
-            </ThemedText>
+        {/* Indicadores */}
+        <View style={styles.indicatorsRow}>
+          {/* Indicador 1: En tiempo real */}
+          <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
+            <Text style={styles.indicatorNumber}>{participants.length}</Text>
+            <Text style={styles.indicatorLabel}>
+              {selectedMode === 'registro' ? 'Registrados' : 'Ahora mismo'}
+            </Text>
           </View>
-        ) : (
-          <FlatList
-            data={participants}
-            renderItem={renderParticipant}
-            keyExtractor={(item) => item.dni}
-            contentContainerStyle={styles.listContent}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-            }
-          />
-        )}
+
+          {/* Indicador 2: Máximo histórico */}
+          <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
+            <Text style={styles.indicatorNumber}>{stats.maxSimultaneous}</Text>
+            <Text style={styles.indicatorLabel}>
+              {selectedMode === 'registro' ? 'Total' : 'Máximo'}
+            </Text>
+          </View>
+
+          {/* Indicador 3: Participantes únicos */}
+          {selectedMode !== 'registro' && (
+            <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
+              <Text style={styles.indicatorNumber}>{stats.uniqueEntrances}</Text>
+              <Text style={styles.indicatorLabel}>Han entrado</Text>
+            </View>
+          )}
+
+          {/* Indicador de Previstos */}
+          <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color, opacity: 0.8 }]}>
+            <Text style={styles.indicatorNumber}>{potentialCounts[selectedMode]}</Text>
+            <Text style={styles.indicatorLabel}>Previstos</Text>
+          </View>
+        </View>
+
+        {/* Últimos accesos */}
+        <View style={styles.recentAccessSection}>
+          <ThemedText style={styles.subsectionTitle}>
+            {selectedMode === 'registro' ? 'Últimos registros' : 'Últimos accesos'}
+          </ThemedText>
+
+          {recentLogs.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyIcon}>📋</Text>
+              <ThemedText style={styles.emptyText}>
+                {selectedMode === 'registro'
+                  ? 'Aún no hay registros'
+                  : 'Aún no hay accesos registrados'}
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={styles.logsContainer}>
+              {recentLogs.map((log, index) => (
+                <View
+                  key={`${log.dni}-${log.timestamp}-${index}`}
+                  style={[
+                    styles.logCard,
+                    colorScheme === 'dark' ? Shadows.light : Shadows.light,
+                    {
+                      backgroundColor:
+                        colorScheme === 'dark'
+                          ? Colors.dark.cardBackground
+                          : Colors.light.cardBackground,
+                    },
+                  ]}
+                >
+                  <View style={styles.logInfo}>
+                    <ThemedText style={styles.logName}>{log.nombre}</ThemedText>
+                    <ThemedText style={styles.logDni}>DNI: {log.dni}</ThemedText>
+                  </View>
+                  <View style={styles.logMeta}>
+                    {log.direccion && (
+                      <View style={[
+                        styles.logDirectionBadge,
+                        { backgroundColor: log.direccion === 'entrada'
+                          ? Colors.light.directionEntrada
+                          : Colors.light.directionSalida
+                        }
+                      ]}>
+                        <Text style={styles.logDirectionText}>
+                          {log.direccion === 'entrada' ? '⬇️' : '⬆️'}
+                        </Text>
+                      </View>
+                    )}
+                    <ThemedText style={styles.logTime}>
+                      {new Date(log.timestamp).toLocaleTimeString('es-ES', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </ThemedText>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
       </View>
 
       {/* Botón volver */}
       <TouchableOpacity
         style={[
           styles.backButton,
+          Shadows.medium,
           {
             backgroundColor:
-              colorScheme === 'dark' ? Colors.dark.tint : Colors.light.tint,
+              colorScheme === 'dark' ? Colors.dark.primary : Colors.light.primary,
           },
         ]}
         onPress={() => router.back()}
+        activeOpacity={0.8}
       >
         <Text style={styles.backButtonText}>← Volver</Text>
       </TouchableOpacity>
-    </ThemedView>
+    </ScrollView>
+  </ThemedView>
   );
 }
 
@@ -226,33 +505,248 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  locationSelector: {
-    flexDirection: 'row',
-    padding: 10,
-    gap: 8,
-    flexWrap: 'wrap',
+  scrollContent: {
+    paddingBottom: Spacing.xl,
   },
-  locationButton: {
+  logoContainer: {
+    alignItems: 'center',
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
+  logo: {
+    width: 140,
+    height: 48,
+  },
+  // Estilos de selector de modo (unificado)
+  modeSection: {
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
+  },
+  // Contenedor de fila para hamburguesa + selector
+  modeRowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  // Botón de menú hamburguesa
+  hamburgerButton: {
+    width: 60,
+    height: 60,
+    borderRadius: BorderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hamburgerIcon: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  // Selector de modo contraído
+  modeSelectorCollapsed: {
     flex: 1,
-    minWidth: '45%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
-    borderRadius: 10,
-    gap: 8,
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    gap: Spacing.sm,
   },
-  locationIcon: {
+  modeIconLarge: {
+    fontSize: 40,
+  },
+  modeTextLarge: {
     fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    flex: 1,
   },
-  locationText: {
-    fontSize: 14,
+  // Botón para cerrar el menú expandido
+  closeMenuButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  closeMenuIcon: {
+    fontSize: 20,
     fontWeight: 'bold',
   },
+  closeMenuText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Selector de modo expandido
+  modeSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  modeButton: {
+    flex: 1,
+    minWidth: '22%',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  modeIcon: {
+    fontSize: 32,
+    marginBottom: 4,
+  },
+  modeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  // Controles de escaneo
+  scanControls: {
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
+  directionSelector: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  directionButton: {
+    flex: 1,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  directionButtonActive: {
+    // backgroundColor se aplica dinámicamente
+  },
+  directionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  directionButtonTextActive: {
+    color: '#fff',
+  },
+  scanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    gap: Spacing.sm,
+  },
+  scanButtonIcon: {
+    fontSize: 32,
+  },
+  scanButtonText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  divider: {
+    height: 2,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    marginVertical: Spacing.md,
+    marginHorizontal: Spacing.md,
+  },
+  // Sección de estadísticas
+  statsSection: {
+    paddingHorizontal: Spacing.md,
+  },
+  // Fila de indicadores
+  indicatorsRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
+  },
+  indicatorCard: {
+    flex: 1,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 80,
+  },
+  indicatorNumber: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  indicatorLabel: {
+    fontSize: 12,
+    color: '#fff',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  // Sección de accesos recientes
+  recentAccessSection: {
+    marginTop: Spacing.md,
+  },
+  subsectionTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: Spacing.sm,
+    opacity: 0.8,
+  },
+  logsContainer: {
+    gap: Spacing.xs,
+  },
+  logCard: {
+    flexDirection: 'row',
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  logInfo: {
+    flex: 1,
+  },
+  logName: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  logDni: {
+    fontSize: 11,
+    opacity: 0.6,
+    marginTop: 2,
+  },
+  logMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  logDirectionBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logDirectionText: {
+    fontSize: 14,
+  },
+  logTime: {
+    fontSize: 11,
+    opacity: 0.7,
+    minWidth: 45,
+    textAlign: 'right',
+  },
+  // Estilos antiguos (mantenidos para compatibilidad)
   counterContainer: {
-    padding: 20,
-    margin: 15,
-    borderRadius: 15,
+    padding: Spacing.lg,
+    marginVertical: Spacing.sm,
+    marginHorizontal: Spacing.xs,
+    borderRadius: BorderRadius.lg,
     alignItems: 'center',
   },
   counterNumber: {
@@ -265,23 +759,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginTop: 5,
   },
-  listContainer: {
-    flex: 1,
-    paddingHorizontal: 15,
-  },
-  listTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 15,
-  },
   listContent: {
-    paddingBottom: 20,
+    paddingBottom: Spacing.lg,
   },
   participantCard: {
     flexDirection: 'row',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -302,9 +787,9 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   badge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: Spacing.xs,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: BorderRadius.full,
   },
   badgeText: {
     color: '#fff',
@@ -318,16 +803,18 @@ const styles = StyleSheet.create({
   },
   emptyIcon: {
     fontSize: 60,
-    marginBottom: 15,
+    marginBottom: Spacing.md,
   },
   emptyText: {
     fontSize: 16,
     opacity: 0.6,
   },
   backButton: {
-    margin: 15,
-    padding: 15,
-    borderRadius: 10,
+    marginHorizontal: Spacing.md,
+    marginTop: Spacing.xl,
+    marginBottom: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.full,
     alignItems: 'center',
   },
   backButtonText: {

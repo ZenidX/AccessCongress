@@ -1,0 +1,103 @@
+# Datos de ejemplo para AccessCongress
+# Alineados con el modelo actualizado
+
+mutation CreateSeedData @transaction @auth(level: NO_ACCESS) {
+  # Insertar participantes de ejemplo
+  participant_insertMany(data: [
+    {
+      dni: "12345678A",
+      nombre: "Juan Pérez García",
+      permisos: {
+        aula_magna: true,
+        master_class: true,
+        cena: true
+      },
+      estado: {
+        registrado: true,
+        en_aula_magna: true,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: 1703145600, # 2023-12-21 12:00:00
+      ultima_actualizacion: 1703149200 # 2023-12-21 13:00:00
+    },
+    {
+      dni: "87654321B",
+      nombre: "María García López",
+      permisos: {
+        aula_magna: true,
+        master_class: false,
+        cena: true
+      },
+      estado: {
+        registrado: true,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: 1703145700,
+      ultima_actualizacion: 1703145700
+    },
+    {
+      dni: "11223344C",
+      nombre: "Carlos Rodríguez Martín",
+      permisos: {
+        aula_magna: true,
+        master_class: true,
+        cena: false
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false
+      },
+      timestamp_registro: null,
+      ultima_actualizacion: null
+    }
+  ])
+
+  # Insertar logs de acceso de ejemplo
+  accessLog_insertMany(data: [
+    {
+      dni: "12345678A",
+      nombre: "Juan Pérez García",
+      modo: "registro",
+      direccion: null,
+      timestamp: 1703145600,
+      operador: "Operador 1",
+      exito: true,
+      mensaje: "Registro exitoso"
+    },
+    {
+      dni: "12345678A",
+      nombre: "Juan Pérez García",
+      modo: "aula_magna",
+      direccion: "entrada",
+      timestamp: 1703149200,
+      operador: "Operador 2",
+      exito: true,
+      mensaje: "Acceso a Aula Magna concedido"
+    },
+    {
+      dni: "87654321B",
+      nombre: "María García López",
+      modo: "registro",
+      direccion: null,
+      timestamp: 1703145700,
+      operador: "Operador 1",
+      exito: true,
+      mensaje: "Registro exitoso"
+    },
+    {
+      dni: "87654321B",
+      nombre: "María García López",
+      modo: "master_class",
+      direccion: "entrada",
+      timestamp: 1703150000,
+      operador: "Operador 3",
+      exito: false,
+      mensaje: "No tiene permiso para acceder a Master Class"
+    }
+  ])
+}

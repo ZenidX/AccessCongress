@@ -1,41 +1,81 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Theme colors based on Impuls Educació brand identity
+ * https://impulseducacio.org/
+ *
+ * Official brand colors from Impuls Educació style guide:
+ * - Gris corporativo: #48626f
+ * - Blau secundario: #00a1e4
+ * - Duotonos: Blau, Vermell, Verd, Taronja, Lila
  */
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+// Impuls Educació official brand colors
+const impulsBlue = '#00a1e4';        // COLOR SECUNDARI BLAU (oficial)
+const impulsOrange = '#ff8a1f';      // DUOTONO TARONJA (oficial)
+const impulsPurple = '#ba6fb0';      // DUOTONO LILA (oficial)
+const impulsNavy = '#242739';        // Base oscura de duotonos
+const impulsGray = '#48626f';        // COLOR CORPORATIU GRIS (oficial)
+const impulsGreen = '#26b7a0';       // DUOTONO VERD (oficial)
+const impulsRed = '#f15556';         // DUOTONO VERMELL (oficial)
+const impulsLightGray = '#f6f6f6';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    text: impulsGray,
+    background: '#ffffff',
+    tint: impulsBlue,
+    icon: impulsGray,
+    tabIconDefault: impulsGray,
+    tabIconSelected: impulsBlue,
+    primary: impulsBlue,
+    secondary: impulsOrange,
+    accent: impulsNavy,
+    lightBackground: impulsLightGray,
+    cardBackground: '#ffffff',
+    border: '#e0e0e0',
+    success: impulsGreen,
+    error: impulsRed,
+    warning: impulsOrange,
+    // Colores específicos para modos de acceso
+    modeRegistro: impulsGreen,      // Verde para registro
+    modeAulaMagna: impulsPurple,    // Lila para aula magna
+    modeMasterClass: impulsBlue,    // Azul para master class
+    modeCena: impulsOrange,         // Naranja para cena
+    directionEntrada: impulsGray,   // Gris corporativo para entrada
+    directionSalida: impulsGray,    // Gris corporativo para salida
   },
   dark: {
     text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
+    background: impulsNavy,
+    tint: impulsBlue,
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    tabIconSelected: impulsBlue,
+    primary: impulsBlue,
+    secondary: impulsOrange,
+    accent: impulsBlue,
+    lightBackground: '#2a3440',
+    cardBackground: '#2a3440',
+    border: '#3a4450',
+    success: '#4db6ac',             // Verde turquesa más claro para dark mode
+    error: '#ff7961',               // Rojo más claro para dark mode
+    warning: impulsOrange,
+    // Colores específicos para modos de acceso (dark mode)
+    modeRegistro: impulsGreen,
+    modeAulaMagna: impulsPurple,
+    modeMasterClass: impulsBlue,
+    modeCena: impulsOrange,
+    directionEntrada: '#7a8f9b',    // Gris corporativo más claro para dark mode
+    directionSalida: '#7a8f9b',     // Gris corporativo más claro para dark mode
   },
 };
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: 'ui-monospace',
   },
   default: {
@@ -45,9 +85,51 @@ export const Fonts = Platform.select({
     mono: 'monospace',
   },
   web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    sans: "'Open Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
     serif: "Georgia, 'Times New Roman', serif",
     rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });
+
+// Spacing and border radius following Impuls Educació design system
+export const Spacing = {
+  xs: 8,
+  sm: 12,
+  md: 16,
+  lg: 20,
+  xl: 24,
+  xxl: 32,
+};
+
+export const BorderRadius = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  full: 9999, // Pill-shaped buttons like Impuls Educació
+};
+
+export const Shadows = {
+  light: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  medium: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  strong: {
+    shadowColor: '#000',
+    shadowOffset: { width: 6, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 9,
+    elevation: 6,
+  },
+};
