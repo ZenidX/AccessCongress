@@ -84,6 +84,10 @@ import {
   EventForm,
   EventResetModal,
   UserEventAssignment,
+  ParticipantsSection,
+  UsersSection,
+  UserInfoSection,
+  AboutSection,
 } from '@/components/admin';
 import { Event, ResetType } from '@/types/event';
 
@@ -770,15 +774,15 @@ export default function AdminScreen() {
   const renderSectionContent = () => {
     switch (selectedSection) {
       case 'user-info':
-        return renderUserInfoSection();
+        return <UserInfoSection />;
       case 'events':
         return renderEventsSection();
       case 'participants':
-        return renderParticipantsSection();
+        return <ParticipantsSection />;
       case 'users':
-        return renderUsersSection();
+        return <UsersSection />;
       case 'about':
-        return renderAboutSection();
+        return <AboutSection />;
       default:
         return null;
     }
