@@ -91,7 +91,7 @@ export default function AdminScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const { user, isSuperAdmin } = useAuth();
-  const { currentEvent, setCurrentEvent, refreshEvents } = useEvent();
+  const { currentEvent, setCurrentEvent, refreshEvents, availableEvents, isLoadingEvents } = useEvent();
 
   // Estado de carga para operaciones asíncronas
   const [loading, setLoading] = useState(false);
@@ -898,29 +898,56 @@ export default function AdminScreen() {
         📊 Gestión de Participantes
       </ThemedText>
 
-      {/* Current event indicator */}
-      {currentEvent ? (
-        <View style={[
-          styles.currentEventBanner,
-          { backgroundColor: Colors[colorScheme ?? 'light'].success + '20', marginBottom: Spacing.lg }
-        ]}>
-          <Text style={[styles.currentEventLabel, { color: Colors[colorScheme ?? 'light'].success }]}>
-            Evento seleccionado:
-          </Text>
-          <Text style={[styles.currentEventName, { color: Colors[colorScheme ?? 'light'].text }]}>
-            {currentEvent.name}
-          </Text>
-        </View>
-      ) : (
-        <View style={[
-          styles.currentEventBanner,
-          { backgroundColor: Colors[colorScheme ?? 'light'].warning + '20', marginBottom: Spacing.lg }
-        ]}>
-          <Text style={[styles.currentEventLabel, { color: Colors[colorScheme ?? 'light'].warning }]}>
-            ⚠️ Selecciona un evento en la sección "Eventos" para gestionar participantes
-          </Text>
-        </View>
-      )}
+      {/* Event selector */}
+      <View style={styles.eventSelectorSection}>
+        <ThemedText style={styles.fieldLabel}>Evento:</ThemedText>
+        {isLoadingEvents ? (
+          <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].primary} />
+        ) : availableEvents.length === 0 ? (
+          <View style={[
+            styles.currentEventBanner,
+            { backgroundColor: Colors[colorScheme ?? 'light'].warning + '20' }
+          ]}>
+            <Text style={[styles.currentEventLabel, { color: Colors[colorScheme ?? 'light'].warning }]}>
+              ⚠️ No hay eventos disponibles. Crea uno en la sección "Eventos".
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.eventSelectorList}>
+            {availableEvents.map((event) => (
+              <TouchableOpacity
+                key={event.id}
+                style={[
+                  styles.eventSelectorOption,
+                  {
+                    backgroundColor: currentEvent?.id === event.id
+                      ? Colors[colorScheme ?? 'light'].primary
+                      : Colors[colorScheme ?? 'light'].cardBackground,
+                    borderColor: currentEvent?.id === event.id
+                      ? Colors[colorScheme ?? 'light'].primary
+                      : Colors[colorScheme ?? 'light'].border,
+                  },
+                ]}
+                onPress={() => setCurrentEvent(event)}
+              >
+                <Text
+                  style={[
+                    styles.eventSelectorOptionText,
+                    {
+                      color: currentEvent?.id === event.id
+                        ? '#fff'
+                        : Colors[colorScheme ?? 'light'].text,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {event.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
 
       {/* Import mode selector */}
       <View style={styles.importModeSection}>
@@ -2439,6 +2466,25 @@ const styles = StyleSheet.create({
   currentEventName: {
     fontSize: FontSizes.md,
     fontWeight: 'bold',
+  },
+  eventSelectorSection: {
+    marginBottom: Spacing.lg,
+  },
+  eventSelectorList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  eventSelectorOption: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  eventSelectorOptionText: {
+    fontSize: FontSizes.sm,
+    fontWeight: '600',
   },
   importModeSection: {
     marginBottom: Spacing.lg,
