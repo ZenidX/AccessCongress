@@ -16,7 +16,7 @@ import { Colors, BorderRadius, Spacing, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ThemedText } from '../themed/themed-text';
 
-export type AdminSection = 'user-info' | 'events' | 'participants' | 'users' | 'about';
+export type AdminSection = 'user-info' | 'events' | 'invitations' | 'participants' | 'users' | 'about';
 
 interface SidebarItem {
   id: AdminSection;
@@ -37,6 +37,12 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
     icon: '📅',
     label: 'Eventos',
     description: 'Gestión de eventos',
+  },
+  {
+    id: 'invitations',
+    icon: '📧',
+    label: 'Invitaciones',
+    description: 'Gestión de mailing',
   },
   {
     id: 'participants',

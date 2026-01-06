@@ -37,6 +37,7 @@ import {
   UserInfoSection,
   AboutSection,
 } from '@/components/admin';
+import { InvitationsSection } from '@/components/admin/invitations';
 import { Event, ResetType } from '@/types/event';
 
 export default function AdminScreen() {
@@ -100,6 +101,8 @@ export default function AdminScreen() {
         return <UserInfoSection />;
       case 'events':
         return renderEventsSection();
+      case 'invitations':
+        return <InvitationsSection />;
       case 'participants':
         return <ParticipantsSection />;
       case 'users':

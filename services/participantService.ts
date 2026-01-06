@@ -363,15 +363,25 @@ export async function importParticipantsFromCSV(
     const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
     const startIndex = 1; // Assume header is always present
 
+    const skippedRows: { row: number; reason: string; data: any }[] = [];
+    const seenDNIs = new Set<string>();
+    let duplicateCount = 0;
+    let emptyLineCount = 0;
+
     // Process in batches of 500 (Firestore limit)
     const batchSize = 500;
     for (let i = startIndex; i < lines.length; i += batchSize) {
       const batch = writeBatch(db);
       const chunk = lines.slice(i, Math.min(i + batchSize, lines.length));
 
-      for (const line of chunk) {
+      for (let j = 0; j < chunk.length; j++) {
+        const line = chunk[j];
+        const rowNumber = i + j + 1; // +1 because CSV rows start at 1 (header is row 1)
         const trimmedLine = line.trim();
-        if (!trimmedLine) continue;
+        if (!trimmedLine) {
+          emptyLineCount++;
+          continue;
+        }
 
         const values = trimmedLine.split(',').map((s) => s.trim());
         const row = header.reduce((obj, nextKey, index) => {
@@ -387,7 +397,26 @@ export async function importParticipantsFromCSV(
           nombre = `${nom} ${cognoms}`.trim();
         }
 
-        if (!dni || !nombre) continue;
+        // Log skipped rows
+        if (!dni && !nombre) {
+          skippedRows.push({ row: rowNumber, reason: 'DNI y Nombre vacíos', data: row });
+          continue;
+        }
+        if (!dni) {
+          skippedRows.push({ row: rowNumber, reason: 'DNI vacío', data: { nombre, ...row } });
+          continue;
+        }
+        if (!nombre) {
+          skippedRows.push({ row: rowNumber, reason: 'Nombre vacío', data: { dni, ...row } });
+          continue;
+        }
+
+        // Check for duplicates
+        if (seenDNIs.has(dni)) {
+          duplicateCount++;
+          console.warn(`⚠️ Fila ${rowNumber}: DNI duplicado "${dni}" - se sobrescribirá`);
+        }
+        seenDNIs.add(dni);
 
         const masterClass = getValueFromRow(row, [
           'masterclass',
@@ -438,6 +467,29 @@ export async function importParticipantsFromCSV(
 
       await batch.commit();
     }
+
+    // Log summary
+    console.log('\n📊 === RESUMEN DE IMPORTACIÓN CSV ===');
+    console.log(`✅ Participantes importados: ${count}`);
+    console.log(`⏭️ Filas saltadas: ${skippedRows.length}`);
+    console.log(`📭 Líneas vacías: ${emptyLineCount}`);
+    console.log(`🔄 DNIs duplicados (sobrescritos): ${duplicateCount}`);
+    console.log(`📁 Total líneas en CSV: ${lines.length - 1} (sin cabecera)`);
+
+    if (skippedRows.length > 0) {
+      console.log('\n❌ FILAS EXCLUIDAS:');
+      skippedRows.forEach(({ row, reason, data }) => {
+        console.log(`   Fila ${row}: ${reason}`);
+        console.log(`      Datos: ${JSON.stringify(data)}`);
+      });
+    }
+
+    if (duplicateCount > 0) {
+      console.log(`\n⚠️ Nota: ${duplicateCount} DNIs duplicados fueron sobrescritos (solo cuenta el último)`);
+      console.log(`   Participantes únicos finales: ${seenDNIs.size}`);
+    }
+
+    console.log('====================================\n');
 
     return count;
   } catch (error) {
@@ -483,11 +535,17 @@ export async function importParticipantsFromExcel(
     const batchSize = 500;
     const rows = data as any[];
 
+    const skippedRows: { row: number; reason: string; data: any }[] = [];
+    const seenDNIs = new Set<string>();
+    let duplicateCount = 0;
+
     for (let i = 0; i < rows.length; i += batchSize) {
       const batch = writeBatch(db);
       const chunk = rows.slice(i, Math.min(i + batchSize, rows.length));
 
-      for (const row of chunk) {
+      for (let j = 0; j < chunk.length; j++) {
+        const row = chunk[j];
+        const rowNumber = i + j + 2; // +2 because Excel rows start at 1 and row 1 is header
         const dni = getValueFromRow(row, ['dni']);
 
         // Build nombre from NOM + COGNOMS or use nombre field
@@ -503,7 +561,26 @@ export async function importParticipantsFromExcel(
           nombre = `${nom} ${cognoms}`.trim();
         }
 
-        if (!dni || !nombre) continue;
+        // Log skipped rows
+        if (!dni && !nombre) {
+          skippedRows.push({ row: rowNumber, reason: 'DNI y Nombre vacíos (fila vacía)', data: row });
+          continue;
+        }
+        if (!dni) {
+          skippedRows.push({ row: rowNumber, reason: 'DNI vacío', data: { nombre, ...row } });
+          continue;
+        }
+        if (!nombre) {
+          skippedRows.push({ row: rowNumber, reason: 'Nombre vacío', data: { dni, ...row } });
+          continue;
+        }
+
+        // Check for duplicates
+        if (seenDNIs.has(dni)) {
+          duplicateCount++;
+          console.warn(`⚠️ Fila ${rowNumber}: DNI duplicado "${dni}" - se sobrescribirá`);
+        }
+        seenDNIs.add(dni);
 
         const masterClass = getValueFromRow(row, [
           'masterclass',
@@ -554,6 +631,28 @@ export async function importParticipantsFromExcel(
 
       await batch.commit();
     }
+
+    // Log summary
+    console.log('\n📊 === RESUMEN DE IMPORTACIÓN ===');
+    console.log(`✅ Participantes importados: ${count}`);
+    console.log(`⏭️ Filas saltadas: ${skippedRows.length}`);
+    console.log(`🔄 DNIs duplicados (sobrescritos): ${duplicateCount}`);
+    console.log(`📁 Total filas en Excel: ${rows.length}`);
+
+    if (skippedRows.length > 0) {
+      console.log('\n❌ FILAS EXCLUIDAS:');
+      skippedRows.forEach(({ row, reason, data }) => {
+        console.log(`   Fila ${row}: ${reason}`);
+        console.log(`      Datos: ${JSON.stringify(data)}`);
+      });
+    }
+
+    if (duplicateCount > 0) {
+      console.log(`\n⚠️ Nota: ${duplicateCount} DNIs duplicados fueron sobrescritos (solo cuenta el último)`);
+      console.log(`   Participantes únicos finales: ${seenDNIs.size}`);
+    }
+
+    console.log('================================\n');
 
     return count;
   } catch (error) {

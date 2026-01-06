@@ -234,19 +234,28 @@ export default function DashboardScreen() {
 
   /**
    * Suscripción a los últimos logs y carga de estadísticas
+   * Las estadísticas se recargan cada vez que cambian los logs
    */
   useEffect(() => {
     const eventId = currentEvent?.id;
 
+    // Función para cargar estadísticas
+    const loadStats = () => {
+      getAccessStats(selectedMode, eventId).then((newStats) => {
+        setStats(newStats);
+      });
+    };
+
+    // Cargar estadísticas iniciales
+    loadStats();
+
     // Suscribirse a los últimos 10 accesos en tiempo real
+    // Cuando cambian los logs, recargar estadísticas
     const unsubscribeLogs = subscribeToRecentAccessLogs(selectedMode, 10, (logs) => {
       setRecentLogs(logs);
+      // Recargar estadísticas cuando llegan nuevos logs
+      loadStats();
     }, eventId);
-
-    // Cargar estadísticas
-    getAccessStats(selectedMode, eventId).then((stats) => {
-      setStats(stats);
-    });
 
     return () => {
       unsubscribeLogs();

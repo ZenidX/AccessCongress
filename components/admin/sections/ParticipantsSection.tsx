@@ -36,6 +36,8 @@ import {
   deleteParticipant,
   ImportMode,
 } from '@/services/participantService';
+import { sendEmailToParticipant, sendBulkEmails } from '@/services/emailSendService';
+import { getDefaultTemplate } from '@/services/emailTemplateService';
 import { Participant } from '@/types/participant';
 import { Event } from '@/types/event';
 import { Colors, BorderRadius, Spacing, Shadows, FontSizes } from '@/constants/theme';
@@ -69,6 +71,12 @@ export function ParticipantsSection() {
   const [newParticipantNombre, setNewParticipantNombre] = useState('');
   const [newParticipantEmail, setNewParticipantEmail] = useState('');
   const [newParticipantTelefono, setNewParticipantTelefono] = useState('');
+
+  // Email sending state
+  const [showEmailConfirmModal, setShowEmailConfirmModal] = useState(false);
+  const [emailTarget, setEmailTarget] = useState<'single' | 'all'>('all');
+  const [selectedParticipantForEmail, setSelectedParticipantForEmail] = useState<Participant | null>(null);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   // Load events directly (same logic as EventManager)
   useEffect(() => {
@@ -338,6 +346,103 @@ export function ParticipantsSection() {
   };
 
   /**
+   * Send email to a single participant
+   */
+  const handleSendEmailToParticipant = async (participant: Participant) => {
+    if (!participant.email) {
+      Alert.alert('Error', 'Este participante no tiene email registrado');
+      return;
+    }
+    if (!currentEvent) {
+      Alert.alert('Error', 'No hay evento seleccionado');
+      return;
+    }
+
+    // Check if there's a default template
+    const template = await getDefaultTemplate(currentEvent.id);
+    if (!template) {
+      Alert.alert(
+        'Sin plantilla',
+        'No hay plantilla de email configurada para este evento. Ve a la sección "Invitaciones" para crear una.'
+      );
+      return;
+    }
+
+    setSelectedParticipantForEmail(participant);
+    setEmailTarget('single');
+    setShowEmailConfirmModal(true);
+  };
+
+  /**
+   * Send email to all participants with email
+   */
+  const handleSendEmailToAll = async () => {
+    if (!currentEvent) {
+      Alert.alert('Error', 'No hay evento seleccionado');
+      return;
+    }
+
+    const participantsWithEmail = participants.filter((p) => p.email);
+    if (participantsWithEmail.length === 0) {
+      Alert.alert('Error', 'No hay participantes con email registrado');
+      return;
+    }
+
+    // Check if there's a default template
+    const template = await getDefaultTemplate(currentEvent.id);
+    if (!template) {
+      Alert.alert(
+        'Sin plantilla',
+        'No hay plantilla de email configurada para este evento. Ve a la sección "Invitaciones" para crear una.'
+      );
+      return;
+    }
+
+    setEmailTarget('all');
+    setShowEmailConfirmModal(true);
+  };
+
+  /**
+   * Confirm and send emails
+   */
+  const handleConfirmSendEmail = async () => {
+    if (!currentEvent?.id) return;
+
+    setSendingEmail(true);
+    try {
+      if (emailTarget === 'single' && selectedParticipantForEmail) {
+        const result = await sendEmailToParticipant(currentEvent.id, selectedParticipantForEmail.dni);
+        if (result.success) {
+          Alert.alert('Éxito', `Email enviado a ${selectedParticipantForEmail.nombre}`);
+        } else {
+          Alert.alert('Error', result.error || 'No se pudo enviar el email');
+        }
+      } else {
+        const result = await sendBulkEmails(currentEvent.id);
+        if (result.success) {
+          Alert.alert(
+            'Envío completado',
+            `Se enviaron ${result.sentCount} emails correctamente.${
+              result.failedCount > 0 ? `\n${result.failedCount} fallaron.` : ''
+            }`
+          );
+        } else {
+          Alert.alert(
+            'Envío parcial',
+            `Enviados: ${result.sentCount}\nFallidos: ${result.failedCount}`
+          );
+        }
+      }
+      setShowEmailConfirmModal(false);
+      setSelectedParticipantForEmail(null);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Error al enviar emails');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  /**
    * Reset all participant states
    */
   const handleResetStates = () => {
@@ -399,7 +504,7 @@ export function ParticipantsSection() {
             { backgroundColor: Colors[colorScheme ?? 'light'].warning + '20' }
           ]}>
             <Text style={[styles.warningText, { color: Colors[colorScheme ?? 'light'].warning }]}>
-              ⚠️ No hay eventos disponibles. Crea uno en la sección "Eventos".
+              ⚠️ No hay eventos disponibles. Crea uno en la sección &quot;Eventos&quot;.
             </Text>
           </View>
         ) : (
@@ -611,13 +716,30 @@ export function ParticipantsSection() {
           <ThemedText style={styles.sectionTitle}>
             👥 Lista de Participantes ({participants.length})
           </ThemedText>
-          <TouchableOpacity
-            onPress={loadParticipants}
-            disabled={loadingParticipants}
-            style={{ padding: Spacing.xs }}
-          >
-            <Text style={{ fontSize: 20 }}>{loadingParticipants ? '⏳' : '🔄'}</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+            {/* Send email to all button */}
+            {currentEvent && participants.filter((p) => p.email).length > 0 && (
+              <TouchableOpacity
+                onPress={handleSendEmailToAll}
+                disabled={loading || sendingEmail}
+                style={[
+                  styles.emailAllButton,
+                  { backgroundColor: Colors[colorScheme ?? 'light'].primary },
+                ]}
+              >
+                <Text style={styles.emailAllButtonText}>
+                  📧 Enviar a todos ({participants.filter((p) => p.email).length})
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={loadParticipants}
+              disabled={loadingParticipants}
+              style={{ padding: Spacing.xs }}
+            >
+              <Text style={{ fontSize: 20 }}>{loadingParticipants ? '⏳' : '🔄'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {loadingParticipants ? (
@@ -698,13 +820,26 @@ export function ParticipantsSection() {
                     </View>
                   </View>
                   <View style={[styles.tableCell, styles.colAcciones]}>
-                    <TouchableOpacity
-                      onPress={() => handleDeleteParticipant(participant.dni, participant.nombre)}
-                      style={[styles.deleteButton, { backgroundColor: Colors.light.error }]}
-                      disabled={loading}
-                    >
-                      <Text style={styles.deleteButtonText}>🗑️</Text>
-                    </TouchableOpacity>
+                    <View style={styles.actionButtonsRow}>
+                      {/* Email button - only show if participant has email */}
+                      {participant.email && (
+                        <TouchableOpacity
+                          onPress={() => handleSendEmailToParticipant(participant)}
+                          style={[styles.emailButton, { backgroundColor: Colors.light.primary }]}
+                          disabled={loading || sendingEmail}
+                        >
+                          <Text style={styles.emailButtonText}>📧</Text>
+                        </TouchableOpacity>
+                      )}
+                      {/* Delete button */}
+                      <TouchableOpacity
+                        onPress={() => handleDeleteParticipant(participant.dni, participant.nombre)}
+                        style={[styles.deleteButton, { backgroundColor: Colors.light.error }]}
+                        disabled={loading}
+                      >
+                        <Text style={styles.deleteButtonText}>🗑️</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               ))}
@@ -820,6 +955,75 @@ export function ParticipantsSection() {
                 disabled={loading}
               >
                 <Text style={styles.submitButtonText}>Añadir</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Email confirmation modal */}
+      <Modal
+        visible={showEmailConfirmModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowEmailConfirmModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
+            <ThemedText style={styles.modalTitle}>
+              📧 Confirmar Envío de Email
+            </ThemedText>
+
+            {emailTarget === 'single' && selectedParticipantForEmail ? (
+              <View style={styles.emailConfirmInfo}>
+                <ThemedText style={styles.emailConfirmText}>
+                  ¿Enviar invitación a:
+                </ThemedText>
+                <ThemedText style={styles.emailConfirmName}>
+                  {selectedParticipantForEmail.nombre}
+                </ThemedText>
+                <ThemedText style={styles.emailConfirmEmail}>
+                  {selectedParticipantForEmail.email}
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={styles.emailConfirmInfo}>
+                <ThemedText style={styles.emailConfirmText}>
+                  ¿Enviar invitación a todos los participantes con email?
+                </ThemedText>
+                <ThemedText style={styles.emailConfirmCount}>
+                  {participants.filter((p) => p.email).length} participantes recibirán el email
+                </ThemedText>
+              </View>
+            )}
+
+            <ThemedText style={styles.emailConfirmNote}>
+              Se usará la plantilla predeterminada del evento &quot;{currentEvent?.name}&quot;.
+            </ThemedText>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelModalButton]}
+                onPress={() => {
+                  setShowEmailConfirmModal(false);
+                  setSelectedParticipantForEmail(null);
+                }}
+                disabled={sendingEmail}
+              >
+                <Text style={styles.cancelModalButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.confirmModalButton,
+                  { backgroundColor: Colors.light.primary },
+                ]}
+                onPress={handleConfirmSendEmail}
+                disabled={sendingEmail}
+              >
+                <Text style={styles.confirmModalButtonText}>
+                  {sendingEmail ? 'Enviando...' : '📧 Enviar'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1021,8 +1225,33 @@ const styles = StyleSheet.create({
     width: 200,
   },
   colAcciones: {
-    width: 60,
+    width: 90,
     alignItems: 'center',
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 4,
+    alignItems: 'center',
+  },
+  emailButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emailButtonText: {
+    fontSize: 14,
+  },
+  emailAllButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.md,
+  },
+  emailAllButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: FontSizes.sm,
   },
   permisosContainer: {
     flexDirection: 'row',
@@ -1129,6 +1358,55 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.success,
   },
   submitButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  // Email confirmation modal
+  emailConfirmInfo: {
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  emailConfirmText: {
+    fontSize: FontSizes.md,
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+  emailConfirmName: {
+    fontSize: FontSizes.lg,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  emailConfirmEmail: {
+    fontSize: FontSizes.sm,
+    opacity: 0.7,
+    textAlign: 'center',
+  },
+  emailConfirmCount: {
+    fontSize: FontSizes.lg,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    color: Colors.light.primary,
+  },
+  emailConfirmNote: {
+    fontSize: FontSizes.xs,
+    fontStyle: 'italic',
+    opacity: 0.7,
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  cancelModalButton: {
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  cancelModalButtonText: {
+    fontWeight: '600',
+  },
+  confirmModalButton: {},
+  confirmModalButtonText: {
     color: '#fff',
     fontWeight: '600',
   },

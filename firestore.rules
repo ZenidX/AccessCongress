@@ -126,6 +126,32 @@ service cloud.firestore {
         // Logs should not be updated or deleted
         allow update, delete: if false;
       }
+
+      // ============================================
+      // EMAIL TEMPLATES (subcollection)
+      // ============================================
+      match /emailTemplates/{templateId} {
+        // Admin roles can read templates for events they can access
+        allow read: if isAnyAdmin() && canAccessEvent(eventId);
+
+        // Admin roles can create/update/delete templates
+        allow create, update, delete: if isAnyAdmin() && canAccessEvent(eventId);
+      }
+
+      // ============================================
+      // EMAIL LOGS (subcollection)
+      // ============================================
+      match /emailLogs/{logId} {
+        // Admin roles can read email logs
+        allow read: if isAnyAdmin() && canAccessEvent(eventId);
+
+        // Only Cloud Functions can create logs (via admin SDK)
+        // But allow admins for testing
+        allow create: if isAnyAdmin() && canAccessEvent(eventId);
+
+        // Logs should not be updated or deleted
+        allow update, delete: if false;
+      }
     }
 
     // ============================================

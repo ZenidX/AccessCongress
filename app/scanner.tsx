@@ -4,24 +4,26 @@
  * Funcionalidad principal de la aplicación. Escanea códigos QR de participantes
  * y valida su acceso según el modo seleccionado (Registro, Aula Magna, Master Class, Cena).
  *
- * Formatos de QR aceptados:
- * 1. JSON completo: {"dni":"12345678A","nombre":"Juan Pérez","permisos":{...}}
- * 2. DNI simple: 12345678A
- * 3. DNI + email: 12345678A+email@example.com
+ * Formatos de QR aceptados (en orden de prioridad):
+ * 1. EventId/DNI: abc123/12345678A (formato nuevo - emails con QR)
+ * 2. JSON: {"dni":"12345678A","nombre":"Juan Pérez"}
+ * 3. DNI simple: 12345678A
+ * 4. DNI + email: 12345678A+email@example.com
  *
  * Flujo:
  * 1. Solicita permisos de cámara
  * 2. Escanea código QR
- * 3. Intenta parsear como JSON, si falla extrae el DNI
- * 4. Busca el participante en Firestore
- * 5. Aplica validaciones según el modo (permisos, estado actual, etc.)
- * 6. Actualiza estado del participante si la validación es exitosa
- * 7. Registra el intento en los logs de acceso
- * 8. Muestra resultado visual al operador (modal de éxito/error)
+ * 3. Detecta formato y extrae eventId/DNI
+ * 4. Valida que el eventId coincida con el evento activo
+ * 5. Busca el participante en Firestore
+ * 6. Aplica validaciones según el modo (permisos, estado actual, etc.)
+ * 7. Actualiza estado del participante si la validación es exitosa
+ * 8. Registra el intento en los logs de acceso
+ * 9. Muestra resultado visual al operador (modal de éxito/error)
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { CameraView, Camera } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed/themed-view';
@@ -30,7 +32,6 @@ import { useApp } from '@/contexts/AppContext';
 import { validateAccess } from '@/utils/validations';
 import {
   getParticipantByDNI,
-  upsertParticipantFromQR,
   updateParticipantStatus,
   logAccess,
 } from '@/services/participantService';
@@ -111,54 +112,83 @@ export default function ScannerScreen() {
       let participante: Participant | null;
       let qrNombre: string | null = null;
 
-      // 1. Intentar parsear como JSON (formato simplificado: solo dni y nombre)
-      try {
-        const qrData: QRData = JSON.parse(data);
+      const qrContent = data.trim();
 
-        if (!qrData.dni || !qrData.nombre) {
-          throw new Error('QR JSON inválido: faltan DNI o nombre');
+      // 1. FORMATO NUEVO: eventId/dni (desde emails con QR)
+      // Detectar si contiene "/" y no es JSON
+      if (qrContent.includes('/') && !qrContent.startsWith('{')) {
+        const parts = qrContent.split('/');
+
+        if (parts.length !== 2) {
+          throw new Error(`Formato QR inválido.\n\nSe esperaba: eventId/dni\nRecibido: ${qrContent}`);
         }
 
-        dni = qrData.dni.trim();
-        qrNombre = qrData.nombre.trim();
+        const [qrEventId, qrDni] = parts;
 
-        // Buscar participante en Firestore por DNI (en el evento activo)
-        participante = await getParticipantByDNI(dni, currentEvent?.id);
+        // Validar que hay evento activo
+        if (!currentEvent?.id) {
+          throw new Error('No hay evento activo seleccionado.\n\nSelecciona un evento en el Dashboard antes de escanear.');
+        }
+
+        // Validar que el eventId del QR coincide con el evento activo
+        if (qrEventId !== currentEvent.id) {
+          throw new Error(`Este QR es para otro evento.\n\nEvento del QR: ${qrEventId}\nEvento activo: ${currentEvent.name}\n\nAsegúrate de tener seleccionado el evento correcto.`);
+        }
+
+        dni = qrDni.trim();
+
+        // Buscar participante en Firestore
+        participante = await getParticipantByDNI(dni, currentEvent.id);
 
         if (!participante) {
-          // Participante no encontrado - mostrar mensaje según rol
           const isAdminRole = user?.role && ['super_admin', 'admin_responsable', 'admin'].includes(user.role);
           const errorMsg = isAdminRole
-            ? `Participante no encontrado en la base de datos.\n\nDNI: ${dni}\nNombre: ${qrNombre}\n\nSi quisieras inscribir a este participante, regístralo antes en el apartado de Administración.`
-            : `Participante no encontrado en la base de datos.\n\nDNI: ${dni}\nNombre: ${qrNombre}\n\nSi este participante debería estar inscrito, avisa a tu administrador.`;
+            ? `Participante no encontrado.\n\nDNI: ${dni}\nEvento: ${currentEvent.name}\n\nRegistra al participante en Administración.`
+            : `Participante no encontrado.\n\nDNI: ${dni}\n\nContacta a tu administrador.`;
           throw new Error(errorMsg);
         }
 
-        // Verificar que el nombre del QR coincida con el de Firestore
-        const nombreFirestore = participante.nombre.toLowerCase().trim();
-        const nombreQR = qrNombre.toLowerCase();
+      // 2. FORMATO JSON: {"dni":"...", "nombre":"..."}
+      } else if (qrContent.startsWith('{')) {
+        try {
+          const qrData: QRData = JSON.parse(qrContent);
 
-        if (nombreFirestore !== nombreQR) {
-          console.warn(`⚠️ Nombre en QR (${qrNombre}) no coincide exactamente con Firestore (${participante.nombre})`);
-          // Permitir continuar pero mostrar advertencia
-          showResult(
-            true,
-            `⚠️ Advertencia: El nombre en el QR difiere ligeramente.\n\nQR: ${qrNombre}\nBase de datos: ${participante.nombre}\n\nSe procederá con la validación.`
-          );
-          // Esperar 2 segundos antes de continuar
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          if (!qrData.dni || !qrData.nombre) {
+            throw new Error('QR JSON inválido: faltan DNI o nombre');
+          }
+
+          dni = qrData.dni.trim();
+          qrNombre = qrData.nombre.trim();
+
+          // Buscar participante en Firestore por DNI (en el evento activo)
+          participante = await getParticipantByDNI(dni, currentEvent?.id);
+
+          if (!participante) {
+            const isAdminRole = user?.role && ['super_admin', 'admin_responsable', 'admin'].includes(user.role);
+            const errorMsg = isAdminRole
+              ? `Participante no encontrado en la base de datos.\n\nDNI: ${dni}\nNombre: ${qrNombre}\n\nSi quisieras inscribir a este participante, regístralo antes en el apartado de Administración.`
+              : `Participante no encontrado en la base de datos.\n\nDNI: ${dni}\nNombre: ${qrNombre}\n\nSi este participante debería estar inscrito, avisa a tu administrador.`;
+            throw new Error(errorMsg);
+          }
+
+          // Verificar que el nombre del QR coincida con el de Firestore
+          const nombreFirestore = participante.nombre.toLowerCase().trim();
+          const nombreQR = qrNombre.toLowerCase();
+
+          if (nombreFirestore !== nombreQR) {
+            console.warn(`⚠️ Nombre en QR (${qrNombre}) no coincide exactamente con Firestore (${participante.nombre})`);
+            showResult(
+              true,
+              `⚠️ Advertencia: El nombre en el QR difiere ligeramente.\n\nQR: ${qrNombre}\nBase de datos: ${participante.nombre}\n\nSe procederá con la validación.`
+            );
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        } catch (jsonError) {
+          throw new Error(`QR JSON malformado.\n\nContenido: ${qrContent}\n\nError: ${jsonError instanceof Error ? jsonError.message : 'Error de sintaxis'}`);
         }
 
-      } catch (jsonError) {
-        // 2. Si no es JSON válido, tratarlo como DNI simple
-        const qrContent = data.trim();
-
-        // Verificar si parece JSON pero está malformado
-        if (qrContent.startsWith('{') || qrContent.startsWith('[')) {
-          throw new Error(`QR JSON malformado. No se pudo parsear.\n\nContenido del QR:\n${qrContent}\n\nFormato correcto esperado:\n{"dni":"12345678A","nombre":"Nombre Completo"}\n\nError: ${jsonError instanceof Error ? jsonError.message : 'Error de sintaxis'}`);
-        }
-
-        // Formato aceptado: "DNI" o "DNI+email"
+      // 3. FORMATO SIMPLE: DNI o DNI+email
+      } else {
         // Extraer DNI (antes del + si hay email)
         dni = qrContent.split('+')[0].trim();
 
@@ -172,11 +202,10 @@ export default function ScannerScreen() {
           throw new Error(`Formato de DNI inválido: ${dni}\n\nEl DNI debe tener 8 dígitos seguidos de una letra.`);
         }
 
-        // 3. Buscar participante en Firestore (en el evento activo)
+        // Buscar participante en Firestore (en el evento activo)
         participante = await getParticipantByDNI(dni, currentEvent?.id);
 
         if (!participante) {
-          // Participante no encontrado - mostrar mensaje según rol
           const isAdminRole = user?.role && ['super_admin', 'admin_responsable', 'admin'].includes(user.role);
           const errorMsg = isAdminRole
             ? `Participante no encontrado en la base de datos.\n\nDNI: ${dni}\n\nSi quisieras inscribir a este participante, regístralo antes en el apartado de Administración.`
