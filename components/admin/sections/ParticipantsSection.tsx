@@ -43,6 +43,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEvent } from '@/contexts/EventContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getEventsByOrganization, getAllEvents } from '@/services/eventService';
+import { getUserData } from '@/services/userService';
+import { User } from '@/types/user';
 
 export function ParticipantsSection() {
   const colorScheme = useColorScheme();
@@ -58,6 +60,8 @@ export function ParticipantsSection() {
   // Local events state (fetch directly like EventManager)
   const [events, setEvents] = useState<Event[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
+  // Organization names for grouping (organizationId -> name)
+  const [orgNames, setOrgNames] = useState<Record<string, string>>({});
 
   // Add participant modal state
   const [showAddParticipantModal, setShowAddParticipantModal] = useState(false);
@@ -71,6 +75,7 @@ export function ParticipantsSection() {
     const loadEvents = async () => {
       if (!user) {
         setEvents([]);
+        setOrgNames({});
         setLoadingEvents(false);
         return;
       }
@@ -93,6 +98,20 @@ export function ParticipantsSection() {
         eventList.sort((a, b) => b.date - a.date);
         setEvents(eventList);
 
+        // Get unique organization IDs and fetch their names
+        const uniqueOrgIds = [...new Set(eventList.map(e => e.organizationId))];
+        const names: Record<string, string> = {};
+
+        for (const orgId of uniqueOrgIds) {
+          try {
+            const adminUser = await getUserData(orgId);
+            names[orgId] = adminUser?.username || adminUser?.email || 'Organización desconocida';
+          } catch {
+            names[orgId] = 'Organización desconocida';
+          }
+        }
+        setOrgNames(names);
+
         // Auto-select first event if none selected
         if (!currentEvent && eventList.length > 0) {
           setCurrentEvent(eventList[0]);
@@ -100,6 +119,7 @@ export function ParticipantsSection() {
       } catch (error) {
         console.error('Error loading events:', error);
         setEvents([]);
+        setOrgNames({});
       } finally {
         setLoadingEvents(false);
       }
@@ -348,9 +368,9 @@ export function ParticipantsSection() {
         📊 Gestión de Participantes
       </ThemedText>
 
-      {/* Event selector */}
+      {/* Event selector - grouped by organization */}
       <View style={styles.eventSelectorSection}>
-        <ThemedText style={styles.fieldLabel}>Evento:</ThemedText>
+        <ThemedText style={styles.fieldLabel}>Seleccionar Evento:</ThemedText>
         {loadingEvents ? (
           <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].primary} />
         ) : events.length === 0 ? (
@@ -363,39 +383,89 @@ export function ParticipantsSection() {
             </Text>
           </View>
         ) : (
-          <View style={styles.eventSelectorList}>
-            {events.map((event) => (
-              <TouchableOpacity
-                key={event.id}
-                style={[
-                  styles.eventSelectorOption,
-                  {
-                    backgroundColor: currentEvent?.id === event.id
-                      ? Colors[colorScheme ?? 'light'].primary
-                      : Colors[colorScheme ?? 'light'].cardBackground,
-                    borderColor: currentEvent?.id === event.id
-                      ? Colors[colorScheme ?? 'light'].primary
-                      : Colors[colorScheme ?? 'light'].border,
-                  },
-                ]}
-                onPress={() => setCurrentEvent(event)}
-              >
-                <Text
-                  style={[
-                    styles.eventSelectorOptionText,
-                    {
-                      color: currentEvent?.id === event.id
-                        ? '#fff'
-                        : Colors[colorScheme ?? 'light'].text,
-                    },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {event.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <ScrollView
+            style={[
+              styles.eventSelectorScrollView,
+              { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }
+            ]}
+            nestedScrollEnabled
+          >
+            {/* Group events by organization */}
+            {Object.keys(orgNames).map((orgId) => {
+              const orgEvents = events.filter(e => e.organizationId === orgId);
+              if (orgEvents.length === 0) return null;
+
+              return (
+                <View key={orgId} style={styles.orgGroup}>
+                  {/* Organization header */}
+                  <View style={[
+                    styles.orgHeader,
+                    { backgroundColor: Colors[colorScheme ?? 'light'].primary + '15' }
+                  ]}>
+                    <Text style={[styles.orgHeaderText, { color: Colors[colorScheme ?? 'light'].primary }]}>
+                      🏢 {orgNames[orgId]}
+                    </Text>
+                  </View>
+
+                  {/* Events of this organization */}
+                  <View style={styles.orgEventsList}>
+                    {orgEvents.map((event) => (
+                      <TouchableOpacity
+                        key={event.id}
+                        style={[
+                          styles.eventSelectorOption,
+                          {
+                            backgroundColor: currentEvent?.id === event.id
+                              ? Colors[colorScheme ?? 'light'].primary
+                              : 'transparent',
+                            borderColor: currentEvent?.id === event.id
+                              ? Colors[colorScheme ?? 'light'].primary
+                              : Colors[colorScheme ?? 'light'].border,
+                          },
+                        ]}
+                        onPress={() => setCurrentEvent(event)}
+                      >
+                        <View style={styles.eventOptionContent}>
+                          <Text
+                            style={[
+                              styles.eventSelectorOptionText,
+                              {
+                                color: currentEvent?.id === event.id
+                                  ? '#fff'
+                                  : Colors[colorScheme ?? 'light'].text,
+                              },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {event.name}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.eventDateText,
+                              {
+                                color: currentEvent?.id === event.id
+                                  ? 'rgba(255,255,255,0.8)'
+                                  : Colors[colorScheme ?? 'light'].textSecondary,
+                              },
+                            ]}
+                          >
+                            {new Date(event.date).toLocaleDateString('es-ES', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            })}
+                          </Text>
+                        </View>
+                        {currentEvent?.id === event.id && (
+                          <Text style={styles.selectedIcon}>✓</Text>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
         )}
       </View>
 
@@ -762,25 +832,64 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: Spacing.xs,
   },
-  // Event selector
+  // Event selector (grouped by organization)
   eventSelectorSection: {
     marginBottom: Spacing.lg,
+  },
+  eventSelectorScrollView: {
+    maxHeight: 250,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.xs,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  orgGroup: {
+    marginBottom: Spacing.xs,
+  },
+  orgHeader: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  orgHeaderText: {
+    fontSize: FontSizes.sm,
+    fontWeight: 'bold',
+  },
+  orgEventsList: {
+    paddingHorizontal: Spacing.xs,
+    paddingBottom: Spacing.xs,
+  },
+  eventSelectorOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.xs,
+  },
+  eventOptionContent: {
+    flex: 1,
+  },
+  eventSelectorOptionText: {
+    fontSize: FontSizes.sm,
+    fontWeight: '600',
+  },
+  eventDateText: {
+    fontSize: FontSizes.xs,
+    marginTop: 2,
+  },
+  selectedIcon: {
+    fontSize: FontSizes.md,
+    color: '#fff',
+    fontWeight: 'bold',
+    marginLeft: Spacing.sm,
   },
   eventSelectorList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.xs,
     marginTop: Spacing.xs,
-  },
-  eventSelectorOption: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-  },
-  eventSelectorOptionText: {
-    fontSize: FontSizes.sm,
-    fontWeight: '600',
   },
   warningBanner: {
     padding: Spacing.md,
