@@ -43,24 +43,14 @@ service cloud.firestore {
     // Check if user can access event (based on role and assignments)
     function canAccessEvent(eventId) {
       let user = getUserData();
+      let eventData = get(/databases/$(database)/documents/events/$(eventId)).data;
 
       // Super admin can access all events
-      if (isSuperAdmin()) {
-        return true;
-      }
-
       // Admin roles can access events in their organization
-      if (user.role in ['admin_responsable', 'admin']) {
-        let eventData = get(/databases/$(database)/documents/events/$(eventId)).data;
-        return eventData.organizationId == user.organizationId;
-      }
-
       // Controllers can only access assigned events
-      if (user.role == 'controlador') {
-        return eventId in user.assignedEventIds;
-      }
-
-      return false;
+      return isSuperAdmin() ||
+             (user.role in ['admin_responsable', 'admin'] && eventData.organizationId == user.organizationId) ||
+             (user.role == 'controlador' && eventId in user.assignedEventIds);
     }
 
     // ============================================
