@@ -21,10 +21,11 @@ import {
   RefreshControl,
   Image,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ThemedView } from '@/components/themed-view';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed/themed-view';
+import { ThemedText } from '@/components/themed/themed-text';
 import {
   subscribeToLocationParticipants,
   subscribeToRegisteredParticipants,
@@ -33,9 +34,13 @@ import {
   getPermissionBasedCounts,
 } from '@/services/participantService';
 import { Participant, AccessMode, AccessDirection, AccessLog } from '@/types/participant';
-import { Colors, BorderRadius, Spacing, Shadows } from '@/constants/theme';
+import { Colors, BorderRadius, Spacing, Shadows, FontSizes } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useApp } from '@/contexts/AppContext';
+import { LoginButton } from '@/components/forms/LoginButton';
+import { useAuth } from '@/contexts/AuthContext';
+import { useEvent } from '@/contexts/EventContext';
+import { BackButton } from '@/components/navigation/BackButton';
 
 type Location = 'registrados' | 'aula_magna' | 'master_class' | 'cena';
 
@@ -80,6 +85,12 @@ export default function DashboardScreen() {
   // Contexto global para modo y dirección de escaneo
   const { setModo, setDireccion } = useApp();
 
+  // Usuario autenticado (necesario para habilitar escaneo)
+  const { user } = useAuth();
+
+  // Evento activo (para filtrar participantes)
+  const { currentEvent } = useEvent();
+
   // Modo/ubicación seleccionado (unificado para escaneo y estadísticas)
   const [selectedMode, setSelectedMode] = useState<AccessMode>('registro');
 
@@ -113,7 +124,7 @@ export default function DashboardScreen() {
   /**
    * Suscripción en tiempo real a Firestore
    *
-   * Se actualiza automáticamente cuando cambia selectedMode
+   * Se actualiza automáticamente cuando cambia selectedMode o currentEvent
    * Muestra participantes según el modo seleccionado:
    * - registro: todos los registrados
    * - aula_magna/master_class/cena: participantes actualmente en esa ubicación
@@ -121,50 +132,54 @@ export default function DashboardScreen() {
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
 
+    const eventId = currentEvent?.id;
+
     if (selectedMode === 'registro') {
       // Escuchar todos los participantes con estado.registrado = true
       unsubscribe = subscribeToRegisteredParticipants((data) => {
         setParticipants(data);
         setRefreshing(false);
-      });
+      }, eventId);
     } else {
       // Escuchar participantes en una ubicación específica
       unsubscribe = subscribeToLocationParticipants(selectedMode, (data) => {
         setParticipants(data);
         setRefreshing(false);
-      });
+      }, eventId);
     }
 
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [selectedMode]);
+  }, [selectedMode, currentEvent?.id]);
 
   /**
    * Suscripción a los últimos logs y carga de estadísticas
    */
   useEffect(() => {
+    const eventId = currentEvent?.id;
+
     // Suscribirse a los últimos 10 accesos en tiempo real
     const unsubscribeLogs = subscribeToRecentAccessLogs(selectedMode, 10, (logs) => {
       setRecentLogs(logs);
-    });
+    }, eventId);
 
     // Cargar estadísticas
-    getAccessStats(selectedMode).then((stats) => {
+    getAccessStats(selectedMode, eventId).then((stats) => {
       setStats(stats);
     });
 
     return () => {
       unsubscribeLogs();
     };
-  }, [selectedMode]);
+  }, [selectedMode, currentEvent?.id]);
 
   /**
-   * Cargar recuentos totales de permisos al montar
+   * Cargar recuentos totales de permisos al montar y cuando cambie el evento
    */
   useEffect(() => {
-    getPermissionBasedCounts().then(setPotentialCounts);
-  }, []);
+    getPermissionBasedCounts(currentEvent?.id).then(setPotentialCounts);
+  }, [currentEvent?.id]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -174,8 +189,19 @@ export default function DashboardScreen() {
   /**
    * Abre la cámara para escanear QR
    * Guarda el modo y dirección en el contexto global antes de navegar
+   * Solo funciona si el usuario está autenticado
    */
   const handleOpenScanner = () => {
+    if (!user) {
+      // Usuario no autenticado, mostrar alerta
+      if (Platform.OS === 'web') {
+        window.alert('Debes iniciar sesión para escanear códigos QR');
+      } else {
+        alert('Debes iniciar sesión para escanear códigos QR');
+      }
+      return;
+    }
+
     setModo(selectedMode);
     setDireccion(scanDirection);
     router.push('/scanner');
@@ -235,14 +261,41 @@ export default function DashboardScreen() {
   return (
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image
-            source={{ uri: 'https://impulseducacio.org/wp-content/uploads/2020/02/logo-web-impuls.png' }}
-            style={styles.logo}
-            resizeMode="contain"
-          />
+        {/* Header: Logo + Login */}
+        <View style={styles.headerContainer}>
+          <View style={styles.logoContainer}>
+            <Image
+              source={{ uri: 'https://impulseducacio.org/wp-content/uploads/2020/02/logo-web-impuls.png' }}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </View>
+          <View style={styles.loginContainer}>
+            <LoginButton />
+          </View>
         </View>
+
+        {/* Current event indicator */}
+        {currentEvent ? (
+          <View style={[styles.eventBanner, { backgroundColor: Colors.light.success + '20' }]}>
+            <Text style={[styles.eventBannerIcon]}>📅</Text>
+            <View style={styles.eventBannerText}>
+              <Text style={[styles.eventBannerLabel, { color: Colors.light.success }]}>
+                Evento activo
+              </Text>
+              <Text style={[styles.eventBannerName, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}>
+                {currentEvent.name}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <View style={[styles.eventBanner, { backgroundColor: Colors.light.warning + '20' }]}>
+            <Text style={[styles.eventBannerIcon]}>⚠️</Text>
+            <Text style={[styles.eventBannerLabel, { color: Colors.light.warning }]}>
+              Selecciona un evento en Administración
+            </Text>
+          </View>
+        )}
 
         {/* Selector de Modo (unificado para escaneo y estadísticas) */}
         <View style={styles.modeSection}>
@@ -268,17 +321,19 @@ export default function DashboardScreen() {
               <Text style={styles.hamburgerIcon}>{modeExpanded ? '✕' : '☰'}</Text>
             </TouchableOpacity>
 
-            {/* Modo seleccionado actual */}
-            <View
+            {/* Modo seleccionado actual - clickable para expandir/colapsar */}
+            <TouchableOpacity
               style={[
                 styles.modeSelectorCollapsed,
                 { backgroundColor: selectedModeInfo?.color },
                 Shadows.medium,
               ]}
+              onPress={() => setModeExpanded(!modeExpanded)}
+              activeOpacity={0.7}
             >
               <Text style={styles.modeIconLarge}>{selectedModeInfo?.icono}</Text>
               <Text style={styles.modeTextLarge}>{selectedModeInfo?.titulo}</Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
           {/* Opciones de modo (se muestran debajo cuando está expandido) */}
@@ -361,18 +416,23 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* Botón para abrir escáner */}
+        {/* Botón para abrir escáner - Solo habilitado si hay usuario autenticado */}
         <TouchableOpacity
           style={[
             styles.scanButton,
             Shadows.strong,
-            { backgroundColor: selectedModeInfo?.color },
+            {
+              backgroundColor: selectedModeInfo?.color,
+              opacity: user ? 1 : 0.5,
+            },
           ]}
           onPress={handleOpenScanner}
           activeOpacity={0.8}
         >
           <Text style={styles.scanButtonIcon}>📷</Text>
-          <Text style={styles.scanButtonText}>Escanear QR</Text>
+          <Text style={styles.scanButtonText}>
+            {user ? 'Escanear QR' : 'Escanear QR (requiere login)'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -452,6 +512,38 @@ export default function DashboardScreen() {
                   <View style={styles.logInfo}>
                     <ThemedText style={styles.logName}>{log.nombre}</ThemedText>
                     <ThemedText style={styles.logDni}>DNI: {log.dni}</ThemedText>
+                    {log.email && (
+                      <ThemedText style={styles.logDetail}>📧 {log.email}</ThemedText>
+                    )}
+                    {log.telefono && (
+                      <ThemedText style={styles.logDetail}>📞 {log.telefono}</ThemedText>
+                    )}
+                    {log.escuela && (
+                      <ThemedText style={styles.logDetail}>🏫 {log.escuela}</ThemedText>
+                    )}
+                    {log.cargo && (
+                      <ThemedText style={styles.logDetail}>💼 {log.cargo}</ThemedText>
+                    )}
+                    {/* Badges de permisos */}
+                    {log.permisos && (
+                      <View style={styles.logPermisosRow}>
+                        {log.permisos.master_class && (
+                          <View style={[styles.logPermisoBadge, { backgroundColor: Colors.light.modeMasterClass }]}>
+                            <Text style={styles.logPermisoText}>MC</Text>
+                          </View>
+                        )}
+                        {log.permisos.cena && (
+                          <View style={[styles.logPermisoBadge, { backgroundColor: Colors.light.modeCena }]}>
+                            <Text style={styles.logPermisoText}>Cena</Text>
+                          </View>
+                        )}
+                        {log.haPagado && (
+                          <View style={[styles.logPermisoBadge, { backgroundColor: Colors.light.success }]}>
+                            <Text style={styles.logPermisoText}>✓ Pagado</Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
                   </View>
                   <View style={styles.logMeta}>
                     {log.direccion && (
@@ -480,23 +572,10 @@ export default function DashboardScreen() {
           )}
         </View>
       </View>
-
-      {/* Botón volver */}
-      <TouchableOpacity
-        style={[
-          styles.backButton,
-          Shadows.medium,
-          {
-            backgroundColor:
-              colorScheme === 'dark' ? Colors.dark.primary : Colors.light.primary,
-          },
-        ]}
-        onPress={() => router.back()}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.backButtonText}>← Volver</Text>
-      </TouchableOpacity>
     </ScrollView>
+    <View style={styles.footer}>
+        <BackButton style={{ margin: 0 }} />
+    </View>
   </ThemedView>
   );
 }
@@ -506,16 +585,35 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: Spacing.xl,
+    paddingBottom: 80,
   },
-  logoContainer: {
+  headerContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.sm,
+  },
+  logoContainer: {
+    flex: 1,
+    alignItems: 'center',
   },
   logo: {
     width: 140,
     height: 48,
+  },
+  loginContainer: {
+    position: 'absolute',
+    right: Spacing.md,
+    top: Spacing.md,
+    zIndex: 9999,
+    elevation: 9999, // Para Android
+  },
+  footer: {
+    padding: Spacing.md,
+    borderTopWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
   },
   // Estilos de selector de modo (unificado)
   modeSection: {
@@ -523,7 +621,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: FontSizes.lg,
     fontWeight: 'bold',
     marginBottom: Spacing.sm,
     paddingHorizontal: Spacing.xs,
@@ -562,7 +660,7 @@ const styles = StyleSheet.create({
     fontSize: 40,
   },
   modeTextLarge: {
-    fontSize: 20,
+    fontSize: FontSizes.xl,
     fontWeight: 'bold',
     color: '#fff',
     flex: 1,
@@ -582,7 +680,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   closeMenuText: {
-    fontSize: 14,
+    fontSize: FontSizes.md,
     fontWeight: '600',
   },
   // Selector de modo expandido
@@ -606,7 +704,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   modeText: {
-    fontSize: 12,
+    fontSize: FontSizes.sm,
     fontWeight: 'bold',
     textAlign: 'center',
   },
@@ -631,7 +729,7 @@ const styles = StyleSheet.create({
     // backgroundColor se aplica dinámicamente
   },
   directionButtonText: {
-    fontSize: 14,
+    fontSize: FontSizes.md,
     fontWeight: '600',
   },
   directionButtonTextActive: {
@@ -650,7 +748,7 @@ const styles = StyleSheet.create({
   },
   scanButtonText: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: FontSizes.xl,
     fontWeight: 'bold',
   },
   divider: {
@@ -683,7 +781,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   indicatorLabel: {
-    fontSize: 12,
+    fontSize: FontSizes.sm,
     color: '#fff',
     marginTop: 4,
     textAlign: 'center',
@@ -693,7 +791,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   subsectionTitle: {
-    fontSize: 14,
+    fontSize: FontSizes.md,
     fontWeight: 'bold',
     marginBottom: Spacing.sm,
     opacity: 0.8,
@@ -705,25 +803,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: Spacing.sm,
     borderRadius: BorderRadius.sm,
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
   logInfo: {
     flex: 1,
   },
   logName: {
-    fontSize: 14,
+    fontSize: FontSizes.md,
     fontWeight: '600',
   },
   logDni: {
-    fontSize: 11,
+    fontSize: FontSizes.sm,
     opacity: 0.6,
     marginTop: 2,
   },
   logMeta: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: Spacing.xs,
+    marginTop: 2,
   },
   logDirectionBadge: {
     width: 28,
@@ -736,10 +835,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   logTime: {
-    fontSize: 11,
+    fontSize: FontSizes.xs,
     opacity: 0.7,
     minWidth: 45,
     textAlign: 'right',
+  },
+  logDetail: {
+    fontSize: FontSizes.xs,
+    opacity: 0.7,
+    marginTop: 2,
+  },
+  logPermisosRow: {
+    flexDirection: 'row',
+    gap: 4,
+    marginTop: 4,
+    flexWrap: 'wrap',
+  },
+  logPermisoBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+  },
+  logPermisoText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: 'bold',
   },
   // Estilos antiguos (mantenidos para compatibilidad)
   counterContainer: {
@@ -755,7 +875,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   counterLabel: {
-    fontSize: 18,
+    fontSize: FontSizes.lg,
     color: '#fff',
     marginTop: 5,
   },
@@ -774,12 +894,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   participantName: {
-    fontSize: 16,
+    fontSize: FontSizes.lg,
     fontWeight: 'bold',
     marginBottom: 5,
   },
   participantDni: {
-    fontSize: 14,
+    fontSize: FontSizes.md,
     opacity: 0.7,
   },
   participantBadges: {
@@ -793,7 +913,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: FontSizes.xs,
     fontWeight: 'bold',
   },
   emptyContainer: {
@@ -806,20 +926,31 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: FontSizes.lg,
     opacity: 0.6,
   },
-  backButton: {
-    marginHorizontal: Spacing.md,
-    marginTop: Spacing.xl,
-    marginBottom: Spacing.md,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.full,
+  // Event banner styles
+  eventBanner: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
   },
-  backButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  eventBannerIcon: {
+    fontSize: 20,
+  },
+  eventBannerText: {
+    flex: 1,
+  },
+  eventBannerLabel: {
+    fontSize: FontSizes.xs,
+    fontWeight: '600',
+  },
+  eventBannerName: {
+    fontSize: FontSizes.md,
     fontWeight: 'bold',
   },
 });

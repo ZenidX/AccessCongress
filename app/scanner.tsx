@@ -24,8 +24,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert, TouchableOpacity, Modal } from 'react-native';
 import { CameraView, Camera } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { ThemedView } from '@/components/themed-view';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed/themed-view';
+import { ThemedText } from '@/components/themed/themed-text';
 import { useApp } from '@/contexts/AppContext';
 import { validateAccess } from '@/utils/validations';
 import {
@@ -37,6 +37,9 @@ import {
 import { QRData, Participant } from '@/types/participant';
 import { Colors, BorderRadius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { LoginButton } from '@/components/forms/LoginButton';
+import { useAuth } from '@/contexts/AuthContext';
+import { useEvent } from '@/contexts/EventContext';
 
 export default function ScannerScreen() {
   const router = useRouter();
@@ -44,6 +47,12 @@ export default function ScannerScreen() {
 
   // Obtener modo, dirección y operador desde el contexto global
   const { modo, direccion, operador } = useApp();
+
+  // Obtener usuario autenticado para mensajes de error personalizados
+  const { user } = useAuth();
+
+  // Obtener evento activo
+  const { currentEvent } = useEvent();
 
   // Estados de permisos de cámara
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -100,24 +109,56 @@ export default function ScannerScreen() {
     try {
       let dni: string;
       let participante: Participant | null;
+      let qrNombre: string | null = null;
 
-      // 1. Intentar parsear como JSON (formato completo)
+      // 1. Intentar parsear como JSON (formato simplificado: solo dni y nombre)
       try {
         const qrData: QRData = JSON.parse(data);
 
-        if (!qrData.dni || !qrData.nombre || !qrData.permisos) {
-          throw new Error('QR JSON inválido: faltan datos obligatorios');
+        if (!qrData.dni || !qrData.nombre) {
+          throw new Error('QR JSON inválido: faltan DNI o nombre');
         }
 
-        // Crear/actualizar participante con datos del QR
-        await upsertParticipantFromQR(qrData);
-        dni = qrData.dni;
-        participante = await getParticipantByDNI(dni);
+        dni = qrData.dni.trim();
+        qrNombre = qrData.nombre.trim();
+
+        // Buscar participante en Firestore por DNI (en el evento activo)
+        participante = await getParticipantByDNI(dni, currentEvent?.id);
+
+        if (!participante) {
+          // Participante no encontrado - mostrar mensaje según rol
+          const isAdminRole = user?.role && ['super_admin', 'admin_responsable', 'admin'].includes(user.role);
+          const errorMsg = isAdminRole
+            ? `Participante no encontrado en la base de datos.\n\nDNI: ${dni}\nNombre: ${qrNombre}\n\nSi quisieras inscribir a este participante, regístralo antes en el apartado de Administración.`
+            : `Participante no encontrado en la base de datos.\n\nDNI: ${dni}\nNombre: ${qrNombre}\n\nSi este participante debería estar inscrito, avisa a tu administrador.`;
+          throw new Error(errorMsg);
+        }
+
+        // Verificar que el nombre del QR coincida con el de Firestore
+        const nombreFirestore = participante.nombre.toLowerCase().trim();
+        const nombreQR = qrNombre.toLowerCase();
+
+        if (nombreFirestore !== nombreQR) {
+          console.warn(`⚠️ Nombre en QR (${qrNombre}) no coincide exactamente con Firestore (${participante.nombre})`);
+          // Permitir continuar pero mostrar advertencia
+          showResult(
+            true,
+            `⚠️ Advertencia: El nombre en el QR difiere ligeramente.\n\nQR: ${qrNombre}\nBase de datos: ${participante.nombre}\n\nSe procederá con la validación.`
+          );
+          // Esperar 2 segundos antes de continuar
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
       } catch (jsonError) {
         // 2. Si no es JSON válido, tratarlo como DNI simple
-        // Formato aceptado: "DNI" o "DNI+email"
         const qrContent = data.trim();
 
+        // Verificar si parece JSON pero está malformado
+        if (qrContent.startsWith('{') || qrContent.startsWith('[')) {
+          throw new Error(`QR JSON malformado. No se pudo parsear.\n\nContenido del QR:\n${qrContent}\n\nFormato correcto esperado:\n{"dni":"12345678A","nombre":"Nombre Completo"}\n\nError: ${jsonError instanceof Error ? jsonError.message : 'Error de sintaxis'}`);
+        }
+
+        // Formato aceptado: "DNI" o "DNI+email"
         // Extraer DNI (antes del + si hay email)
         dni = qrContent.split('+')[0].trim();
 
@@ -125,11 +166,22 @@ export default function ScannerScreen() {
           throw new Error('QR inválido: no se pudo extraer el DNI');
         }
 
-        // 3. Buscar participante en Firestore
-        participante = await getParticipantByDNI(dni);
+        // Validar formato básico de DNI (8 dígitos + letra, o NIE)
+        const dniRegex = /^[0-9XYZ][0-9]{7}[A-Z]$/i;
+        if (!dniRegex.test(dni)) {
+          throw new Error(`Formato de DNI inválido: ${dni}\n\nEl DNI debe tener 8 dígitos seguidos de una letra.`);
+        }
+
+        // 3. Buscar participante en Firestore (en el evento activo)
+        participante = await getParticipantByDNI(dni, currentEvent?.id);
 
         if (!participante) {
-          throw new Error(`Participante no registrado en el sistema.\nDNI: ${dni}`);
+          // Participante no encontrado - mostrar mensaje según rol
+          const isAdminRole = user?.role && ['super_admin', 'admin_responsable', 'admin'].includes(user.role);
+          const errorMsg = isAdminRole
+            ? `Participante no encontrado en la base de datos.\n\nDNI: ${dni}\n\nSi quisieras inscribir a este participante, regístralo antes en el apartado de Administración.`
+            : `Participante no encontrado en la base de datos.\n\nDNI: ${dni}\n\nSi este participante debería estar inscrito, avisa a tu administrador.`;
+          throw new Error(errorMsg);
         }
       }
 
@@ -140,7 +192,7 @@ export default function ScannerScreen() {
       if (validacion.valido && participante) {
         // 6a. ACCESO VÁLIDO
         // Actualizar estado del participante (registrado, en_aula_magna, etc.)
-        await updateParticipantStatus(dni, modo, direccion);
+        await updateParticipantStatus(dni, modo, direccion, currentEvent?.id);
 
         // Registrar log de éxito en la colección access_logs
         await logAccess(
@@ -150,7 +202,10 @@ export default function ScannerScreen() {
           direccion,
           true,
           validacion.mensaje,
-          operador
+          operador,
+          user?.uid,
+          currentEvent?.id,
+          participante
         );
 
         // Mostrar modal de éxito al operador
@@ -165,7 +220,10 @@ export default function ScannerScreen() {
           direccion,
           false,
           validacion.mensaje,
-          operador
+          operador,
+          user?.uid,
+          currentEvent?.id,
+          participante
         );
 
         // Mostrar modal de error al operador
@@ -265,11 +323,16 @@ export default function ScannerScreen() {
     <View style={styles.container}>
       {/* Header: muestra el modo actual y dirección (si aplica) */}
       <View style={styles.header}>
-        <Text style={styles.headerText}>
-          {getModoLabel()}
-          {/* Mostrar dirección solo si no es registro (ej: "ENTRADA" o "SALIDA") */}
-          {modo !== 'registro' && ` - ${direccion.toUpperCase()}`}
-        </Text>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerText}>
+            {getModoLabel()}
+            {/* Mostrar dirección solo si no es registro (ej: "ENTRADA" o "SALIDA") */}
+            {modo !== 'registro' && ` - ${direccion.toUpperCase()}`}
+          </Text>
+        </View>
+        <View style={styles.loginContainer}>
+          <LoginButton />
+        </View>
       </View>
 
       {/* Cámara para escanear QR */}
@@ -376,12 +439,22 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: 'rgba(0,0,0,0.8)',
     padding: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerContent: {
+    flex: 1,
     alignItems: 'center',
   },
   headerText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  loginContainer: {
+    position: 'absolute',
+    right: 15,
   },
   camera: {
     flex: 1,

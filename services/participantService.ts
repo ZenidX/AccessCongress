@@ -1,5 +1,12 @@
 /**
- * Servicio para gestionar participantes en Firebase Firestore
+ * Participant Service
+ *
+ * Manages participants in Firebase Firestore with multi-event support.
+ * All functions require an eventId to scope data to the correct event.
+ *
+ * Data structure:
+ * - events/{eventId}/participants/{dni}
+ * - events/{eventId}/access_logs/{logId}
  */
 
 import {
@@ -16,6 +23,7 @@ import {
   writeBatch,
   orderBy,
   limit,
+  deleteDoc,
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import {
@@ -30,15 +38,30 @@ import * as XLSX from 'xlsx';
 import { Paths, File } from 'expo-file-system';
 import { Platform } from 'react-native';
 
-const PARTICIPANTS_COLLECTION = 'participants';
-const ACCESS_LOGS_COLLECTION = 'access_logs';
+// Collection path helpers
+const getParticipantsCollection = (eventId: string) =>
+  `events/${eventId}/participants`;
+const getAccessLogsCollection = (eventId: string) =>
+  `events/${eventId}/access_logs`;
+
+// Legacy collection names (for backward compatibility during migration)
+const LEGACY_PARTICIPANTS_COLLECTION = 'participants';
+const LEGACY_ACCESS_LOGS_COLLECTION = 'access_logs';
 
 /**
- * Obtener participante por DNI
+ * Get participant by DNI
  */
-export async function getParticipantByDNI(dni: string): Promise<Participant | null> {
+export async function getParticipantByDNI(
+  dni: string,
+  eventId?: string
+): Promise<Participant | null> {
   try {
-    const docRef = doc(db, PARTICIPANTS_COLLECTION, dni);
+    // If no eventId, use legacy collection (backward compatibility)
+    const collectionPath = eventId
+      ? getParticipantsCollection(eventId)
+      : LEGACY_PARTICIPANTS_COLLECTION;
+
+    const docRef = doc(db, collectionPath, dni);
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
@@ -46,90 +69,147 @@ export async function getParticipantByDNI(dni: string): Promise<Participant | nu
     }
     return null;
   } catch (error) {
-    console.error('Error obteniendo participante:', error);
+    console.error('Error getting participant:', error);
     throw error;
   }
 }
 
 /**
- * Crear o actualizar participante desde datos del QR
+ * Get all participants for an event
  */
-export async function upsertParticipantFromQR(qrData: QRData): Promise<Participant> {
+export async function getAllParticipants(eventId?: string): Promise<Participant[]> {
   try {
-    const existingParticipant = await getParticipantByDNI(qrData.dni);
+    const collectionPath = eventId
+      ? getParticipantsCollection(eventId)
+      : LEGACY_PARTICIPANTS_COLLECTION;
 
-    const participant: Participant = existingParticipant || {
-      dni: qrData.dni,
-      nombre: qrData.nombre,
-      permisos: qrData.permisos,
-      estado: {
-        registrado: false,
-        en_aula_magna: false,
-        en_master_class: false,
-        en_cena: false,
-      },
-      ultima_actualizacion: Date.now(),
-    };
+    const querySnapshot = await getDocs(collection(db, collectionPath));
+    const participants: Participant[] = [];
 
-    // Si ya existe, solo actualizamos nombre y permisos por si cambiaron
-    if (existingParticipant) {
-      participant.nombre = qrData.nombre;
-      participant.permisos = qrData.permisos;
-      participant.ultima_actualizacion = Date.now();
+    querySnapshot.forEach((doc) => {
+      participants.push(doc.data() as Participant);
+    });
+
+    // Sort by name
+    participants.sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+    return participants;
+  } catch (error) {
+    console.error('Error getting participants:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete a participant
+ */
+export async function deleteParticipant(
+  dni: string,
+  eventId?: string
+): Promise<void> {
+  try {
+    const collectionPath = eventId
+      ? getParticipantsCollection(eventId)
+      : LEGACY_PARTICIPANTS_COLLECTION;
+
+    const docRef = doc(db, collectionPath, dni);
+    await deleteDoc(docRef);
+    console.log(`✅ Participant ${dni} deleted successfully`);
+  } catch (error) {
+    console.error('Error deleting participant:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get or validate participant from QR data
+ * Permissions are fetched from Firestore, not from QR
+ */
+export async function upsertParticipantFromQR(
+  qrData: QRData,
+  eventId?: string
+): Promise<Participant> {
+  try {
+    const existingParticipant = await getParticipantByDNI(qrData.dni, eventId);
+
+    // Participant MUST exist in Firestore (imported from Excel)
+    if (!existingParticipant) {
+      throw new Error(
+        `Participante con DNI ${qrData.dni} no encontrado en la base de datos. Debe importarse primero.`
+      );
     }
 
-    const docRef = doc(db, PARTICIPANTS_COLLECTION, qrData.dni);
-    await setDoc(docRef, participant);
+    // Verify name matches (optional, but good practice)
+    if (existingParticipant.nombre.toLowerCase() !== qrData.nombre.toLowerCase()) {
+      console.warn(
+        `Name in QR (${qrData.nombre}) doesn't match Firestore (${existingParticipant.nombre})`
+      );
+    }
 
-    return participant;
+    // Update last update timestamp
+    const collectionPath = eventId
+      ? getParticipantsCollection(eventId)
+      : LEGACY_PARTICIPANTS_COLLECTION;
+
+    const docRef = doc(db, collectionPath, qrData.dni);
+    await updateDoc(docRef, {
+      ultima_actualizacion: Date.now(),
+    });
+
+    return existingParticipant;
   } catch (error) {
-    console.error('Error creando/actualizando participante:', error);
+    console.error('Error getting participant:', error);
     throw error;
   }
 }
 
 /**
- * Actualizar estado del participante
+ * Update participant status
  */
 export async function updateParticipantStatus(
   dni: string,
   modo: AccessMode,
-  direccion: AccessDirection
+  direccion: AccessDirection,
+  eventId?: string
 ): Promise<void> {
   try {
-    const docRef = doc(db, PARTICIPANTS_COLLECTION, dni);
-    const updates: Partial<Participant> = {
+    const collectionPath = eventId
+      ? getParticipantsCollection(eventId)
+      : LEGACY_PARTICIPANTS_COLLECTION;
+
+    const docRef = doc(db, collectionPath, dni);
+    const updates: any = {
       ultima_actualizacion: Date.now(),
     };
 
     switch (modo) {
       case 'registro':
-        updates.estado = { registrado: true } as ParticipantStatus;
+        updates['estado.registrado'] = true;
         updates.timestamp_registro = Date.now();
         break;
 
       case 'aula_magna':
-        updates[`estado.en_aula_magna`] = direccion === 'entrada';
+        updates['estado.en_aula_magna'] = direccion === 'entrada';
         break;
 
       case 'master_class':
-        updates[`estado.en_master_class`] = direccion === 'entrada';
+        updates['estado.en_master_class'] = direccion === 'entrada';
         break;
 
       case 'cena':
-        updates[`estado.en_cena`] = direccion === 'entrada';
+        updates['estado.en_cena'] = direccion === 'entrada';
         break;
     }
 
-    await updateDoc(docRef, updates as any);
+    await updateDoc(docRef, updates);
   } catch (error) {
-    console.error('Error actualizando estado:', error);
+    console.error('Error updating status:', error);
     throw error;
   }
 }
 
 /**
- * Registrar log de acceso
+ * Log access attempt
  */
 export async function logAccess(
   dni: string,
@@ -138,10 +218,17 @@ export async function logAccess(
   direccion: AccessDirection,
   exito: boolean,
   mensaje: string,
-  operador: string = 'sistema'
+  operador: string = 'sistema',
+  operadorUid: string = '',
+  eventId?: string,
+  participante?: Participant | null
 ): Promise<void> {
   try {
-    const logRef = doc(collection(db, ACCESS_LOGS_COLLECTION));
+    const collectionPath = eventId
+      ? getAccessLogsCollection(eventId)
+      : LEGACY_ACCESS_LOGS_COLLECTION;
+
+    const logRef = doc(collection(db, collectionPath));
     const log: AccessLog = {
       id: logRef.id,
       dni,
@@ -150,29 +237,40 @@ export async function logAccess(
       direccion,
       timestamp: Date.now(),
       operador,
+      operadorUid,
       exito,
       mensaje,
+      eventId: eventId || '',
+      // Include additional participant info if available
+      email: participante?.email,
+      telefono: participante?.telefono,
+      escuela: participante?.escuela,
+      cargo: participante?.cargo,
+      haPagado: participante?.haPagado,
+      permisos: participante?.permisos,
     };
 
     await setDoc(logRef, log);
   } catch (error) {
-    console.error('Error registrando log:', error);
-    // No lanzamos error para no bloquear el flujo
+    console.error('Error logging access:', error);
+    // Don't throw to avoid blocking the flow
   }
 }
 
 /**
- * Escuchar cambios en participantes en una ubicación específica
+ * Subscribe to participants in a specific location
  */
 export function subscribeToLocationParticipants(
   location: 'aula_magna' | 'master_class' | 'cena',
-  callback: (participants: Participant[]) => void
+  callback: (participants: Participant[]) => void,
+  eventId?: string
 ): Unsubscribe {
+  const collectionPath = eventId
+    ? getParticipantsCollection(eventId)
+    : LEGACY_PARTICIPANTS_COLLECTION;
+
   const stateField = `estado.en_${location}`;
-  const q = query(
-    collection(db, PARTICIPANTS_COLLECTION),
-    where(stateField, '==', true)
-  );
+  const q = query(collection(db, collectionPath), where(stateField, '==', true));
 
   return onSnapshot(q, (snapshot) => {
     const participants = snapshot.docs.map((doc) => doc.data() as Participant);
@@ -181,13 +279,18 @@ export function subscribeToLocationParticipants(
 }
 
 /**
- * Obtener todos los participantes registrados
+ * Subscribe to registered participants
  */
 export function subscribeToRegisteredParticipants(
-  callback: (participants: Participant[]) => void
+  callback: (participants: Participant[]) => void,
+  eventId?: string
 ): Unsubscribe {
+  const collectionPath = eventId
+    ? getParticipantsCollection(eventId)
+    : LEGACY_PARTICIPANTS_COLLECTION;
+
   const q = query(
-    collection(db, PARTICIPANTS_COLLECTION),
+    collection(db, collectionPath),
     where('estado.registrado', '==', true)
   );
 
@@ -197,162 +300,320 @@ export function subscribeToRegisteredParticipants(
   });
 }
 
+// Helper to get a value from a row object with case-insensitive and fuzzy key matching
+const getValueFromRow = (row: any, keys: string[]): string => {
+  for (const key of keys) {
+    if (row[key] !== undefined) return String(row[key]);
+  }
+  // Check for case-insensitive matches
+  const rowKeys = Object.keys(row);
+  for (const key of keys) {
+    const lowerKey = key.toLowerCase();
+    for (const rowKey of rowKeys) {
+      if (rowKey.toLowerCase() === lowerKey) {
+        return String(row[rowKey]);
+      }
+    }
+  }
+  return '';
+};
+
+const isPositiveValue = (value: string): boolean => {
+  const lowerValue = value.toLowerCase();
+  return (
+    lowerValue === 'si' ||
+    lowerValue === 'sí' ||
+    lowerValue === '1' ||
+    lowerValue === 'yes' ||
+    lowerValue === 'true'
+  );
+};
+
+export type ImportMode = 'replace' | 'merge';
+
 /**
- * Cargar participantes desde CSV (para administración)
+ * Import participants from CSV
+ * @param csvData - CSV content as string
+ * @param eventId - Event ID to import to
+ * @param mode - 'replace' deletes existing data first, 'merge' adds/updates
  */
-export async function importParticipantsFromCSV(csvData: string): Promise<number> {
+export async function importParticipantsFromCSV(
+  csvData: string,
+  eventId?: string,
+  mode: ImportMode = 'merge'
+): Promise<number> {
   try {
-    const lines = csvData.trim().split('\n');
-    const batch = writeBatch(db);
-    let count = 0;
+    const collectionPath = eventId
+      ? getParticipantsCollection(eventId)
+      : LEGACY_PARTICIPANTS_COLLECTION;
 
-    // Saltar cabecera si existe
-    const startIndex = lines[0].toLowerCase().includes('dni') ? 1 : 0;
-
-    for (let i = startIndex; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-
-      // Formato esperado: DNI,Nombre,MasterClass,Cena
-      const [dni, nombre, masterClass, cena] = line.split(',').map((s) => s.trim());
-
-      if (!dni || !nombre) continue;
-
-      const participant: Participant = {
-        dni,
-        nombre,
-        permisos: {
-          aula_magna: true, // Todos tienen acceso
-          master_class: masterClass?.toLowerCase() === 'si' || masterClass === '1',
-          cena: cena?.toLowerCase() === 'si' || cena === '1',
-        },
-        estado: {
-          registrado: false,
-          en_aula_magna: false,
-          en_master_class: false,
-          en_cena: false,
-        },
-        ultima_actualizacion: Date.now(),
-      };
-
-      const docRef = doc(db, PARTICIPANTS_COLLECTION, dni);
-      batch.set(docRef, participant);
-      count++;
+    // If replace mode, delete all existing participants first
+    if (mode === 'replace' && eventId) {
+      const existingDocs = await getDocs(collection(db, collectionPath));
+      const deleteBatch = writeBatch(db);
+      existingDocs.docs.forEach((doc) => {
+        deleteBatch.delete(doc.ref);
+      });
+      await deleteBatch.commit();
     }
 
-    await batch.commit();
+    const lines = csvData.trim().split('\n');
+    let count = 0;
+
+    const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
+    const startIndex = 1; // Assume header is always present
+
+    // Process in batches of 500 (Firestore limit)
+    const batchSize = 500;
+    for (let i = startIndex; i < lines.length; i += batchSize) {
+      const batch = writeBatch(db);
+      const chunk = lines.slice(i, Math.min(i + batchSize, lines.length));
+
+      for (const line of chunk) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) continue;
+
+        const values = trimmedLine.split(',').map((s) => s.trim());
+        const row = header.reduce((obj, nextKey, index) => {
+          obj[nextKey] = values[index];
+          return obj;
+        }, {} as any);
+
+        const dni = getValueFromRow(row, ['dni']);
+        let nombre = getValueFromRow(row, ['nombre', 'name']);
+        if (!nombre) {
+          const nom = getValueFromRow(row, ['nom']);
+          const cognoms = getValueFromRow(row, ['cognoms']);
+          nombre = `${nom} ${cognoms}`.trim();
+        }
+
+        if (!dni || !nombre) continue;
+
+        const masterClass = getValueFromRow(row, [
+          'masterclass',
+          'master class',
+          'master_class',
+        ]);
+        const cena = getValueFromRow(row, ['cena', 'dinner']);
+        const acceso = getValueFromRow(row, ['acceso', 'access']).toLowerCase();
+
+        const participant: Participant = {
+          dni,
+          nombre,
+          email: getValueFromRow(row, ['mail', 'email']),
+          telefono: getValueFromRow(row, ['telèfon', 'telefon', 'telefono']),
+          escuela: getValueFromRow(row, [
+            "tipus d'escola",
+            'tipo de escuela',
+            'escuela',
+          ]),
+          cargo: getValueFromRow(row, [
+            'lloc/responsabilitat',
+            'cargo',
+            'responsabilitat',
+          ]),
+          acceso: acceso,
+          haPagado: isPositiveValue(
+            getValueFromRow(row, ['ha pagat?', 'ha pagat', 'ha pagado'])
+          ),
+          permisos: {
+            aula_magna: acceso.includes('presencial'),
+            master_class: isPositiveValue(masterClass),
+            cena: isPositiveValue(cena),
+          },
+          estado: {
+            registrado: false,
+            en_aula_magna: false,
+            en_master_class: false,
+            en_cena: false,
+          },
+          ultima_actualizacion: Date.now(),
+          eventId: eventId || '',
+        };
+
+        const docRef = doc(db, collectionPath, dni);
+        batch.set(docRef, participant);
+        count++;
+      }
+
+      await batch.commit();
+    }
+
     return count;
   } catch (error) {
-    console.error('Error importando participantes:', error);
+    console.error('Error importing participants from CSV:', error);
     throw error;
   }
 }
 
 /**
- * Cargar participantes desde archivo Excel (XLSX/XLS)
+ * Import participants from Excel
+ * @param arrayBuffer - Excel file as ArrayBuffer
+ * @param eventId - Event ID to import to
+ * @param mode - 'replace' deletes existing data first, 'merge' adds/updates
  */
-export async function importParticipantsFromExcel(arrayBuffer: ArrayBuffer): Promise<number> {
+export async function importParticipantsFromExcel(
+  arrayBuffer: ArrayBuffer,
+  eventId?: string,
+  mode: ImportMode = 'merge'
+): Promise<number> {
   try {
-    // Leer el archivo Excel
+    const collectionPath = eventId
+      ? getParticipantsCollection(eventId)
+      : LEGACY_PARTICIPANTS_COLLECTION;
+
+    // If replace mode, delete all existing participants first
+    if (mode === 'replace' && eventId) {
+      const existingDocs = await getDocs(collection(db, collectionPath));
+      const deleteBatch = writeBatch(db);
+      existingDocs.docs.forEach((doc) => {
+        deleteBatch.delete(doc.ref);
+      });
+      await deleteBatch.commit();
+    }
+
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-
-    // Obtener la primera hoja
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-
-    // Convertir a JSON
+    const firstSheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[firstSheetName];
     const data = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
-    const batch = writeBatch(db);
     let count = 0;
 
-    for (const row of data as any[]) {
-      // Buscar las columnas independientemente del nombre exacto
-      // Intentar encontrar DNI (puede estar como DNI, dni, etc.)
-      const dni = row['DNI'] || row['dni'] || row['Dni'] || '';
-      const nombre = row['NOM'] || row['COGNOMS'] || row['Nombre'] || row['nombre'] ||
-                     `${row['NOM'] || ''} ${row['COGNOMS'] || ''}`.trim();
+    // Process in batches of 500 (Firestore limit)
+    const batchSize = 500;
+    const rows = data as any[];
 
-      // Permisos
-      const masterClassRaw = row['MasterClass'] || row['MASTER CLASS'] || row['Master Class'] ||
-                             row['masterclass'] || '';
-      const cenaRaw = row['Cena'] || row['cena'] || row['CENA'] || '';
+    for (let i = 0; i < rows.length; i += batchSize) {
+      const batch = writeBatch(db);
+      const chunk = rows.slice(i, Math.min(i + batchSize, rows.length));
 
-      if (!dni || !nombre) continue;
+      for (const row of chunk) {
+        const dni = getValueFromRow(row, ['dni']);
 
-      // Convertir permisos a booleano
-      const masterClass = String(masterClassRaw).toLowerCase() === 'si' ||
-                         String(masterClassRaw) === '1' ||
-                         String(masterClassRaw).toLowerCase() === 'yes';
-      const cena = String(cenaRaw).toLowerCase() === 'si' ||
-                  String(cenaRaw) === '1' ||
-                  String(cenaRaw).toLowerCase() === 'yes';
+        // Build nombre from NOM + COGNOMS or use nombre field
+        let nombre = getValueFromRow(row, ['nombre', 'name']);
+        if (!nombre) {
+          const nom = getValueFromRow(row, ['nom', 'first name']);
+          const cognoms = getValueFromRow(row, [
+            'cognoms',
+            'cognomes',
+            'apellidos',
+            'last name',
+          ]);
+          nombre = `${nom} ${cognoms}`.trim();
+        }
 
-      const participant: Participant = {
-        dni,
-        nombre,
-        permisos: {
-          aula_magna: true, // Todos tienen acceso
-          master_class: masterClass,
-          cena: cena,
-        },
-        estado: {
-          registrado: false,
-          en_aula_magna: false,
-          en_master_class: false,
-          en_cena: false,
-        },
-        ultima_actualizacion: Date.now(),
-      };
+        if (!dni || !nombre) continue;
 
-      const docRef = doc(db, PARTICIPANTS_COLLECTION, dni);
-      batch.set(docRef, participant);
-      count++;
+        const masterClass = getValueFromRow(row, [
+          'masterclass',
+          'master class',
+          'master_class',
+        ]);
+        const cena = getValueFromRow(row, ['cena', 'dinner']);
+        const acceso = getValueFromRow(row, ['acceso', 'access']).toLowerCase();
+
+        const participant: Participant = {
+          dni,
+          nombre,
+          email: getValueFromRow(row, ['mail', 'email']),
+          telefono: getValueFromRow(row, ['telèfon', 'telefon', 'telefono']),
+          escuela: getValueFromRow(row, [
+            "tipus d'escola",
+            'tipo de escuela',
+            'escuela',
+          ]),
+          cargo: getValueFromRow(row, [
+            'lloc/responsabilitat',
+            'cargo',
+            'responsabilitat',
+          ]),
+          acceso: acceso,
+          haPagado: isPositiveValue(
+            getValueFromRow(row, ['ha pagat?', 'ha pagat', 'ha pagado'])
+          ),
+          permisos: {
+            aula_magna: acceso.includes('presencial'),
+            master_class: isPositiveValue(masterClass),
+            cena: isPositiveValue(cena),
+          },
+          estado: {
+            registrado: false,
+            en_aula_magna: false,
+            en_master_class: false,
+            en_cena: false,
+          },
+          ultima_actualizacion: Date.now(),
+          eventId: eventId || '',
+        };
+
+        const docRef = doc(db, collectionPath, dni);
+        batch.set(docRef, participant);
+        count++;
+      }
+
+      await batch.commit();
     }
 
-    await batch.commit();
     return count;
   } catch (error) {
-    console.error('Error importando desde Excel:', error);
+    console.error('Error importing from Excel:', error);
     throw error;
   }
 }
 
 /**
- * Limpiar todos los estados (útil para testing o reset)
+ * Reset all participant states (for testing or reset)
  */
-export async function resetAllParticipantStates(): Promise<void> {
+export async function resetAllParticipantStates(eventId?: string): Promise<void> {
   try {
-    const querySnapshot = await getDocs(collection(db, PARTICIPANTS_COLLECTION));
-    const batch = writeBatch(db);
+    const collectionPath = eventId
+      ? getParticipantsCollection(eventId)
+      : LEGACY_PARTICIPANTS_COLLECTION;
 
-    querySnapshot.forEach((document) => {
-      batch.update(document.ref, {
-        'estado.registrado': false,
-        'estado.en_aula_magna': false,
-        'estado.en_master_class': false,
-        'estado.en_cena': false,
-        ultima_actualizacion: Date.now(),
+    const querySnapshot = await getDocs(collection(db, collectionPath));
+
+    // Process in batches of 500
+    const batchSize = 500;
+    const docs = querySnapshot.docs;
+
+    for (let i = 0; i < docs.length; i += batchSize) {
+      const batch = writeBatch(db);
+      const chunk = docs.slice(i, Math.min(i + batchSize, docs.length));
+
+      chunk.forEach((document) => {
+        batch.update(document.ref, {
+          'estado.registrado': false,
+          'estado.en_aula_magna': false,
+          'estado.en_master_class': false,
+          'estado.en_cena': false,
+          ultima_actualizacion: Date.now(),
+        });
       });
-    });
 
-    await batch.commit();
+      await batch.commit();
+    }
   } catch (error) {
-    console.error('Error reseteando estados:', error);
+    console.error('Error resetting states:', error);
     throw error;
   }
 }
 
 /**
- * Obtener los últimos N accesos de un modo específico
+ * Get recent access logs for a specific mode
  */
 export async function getRecentAccessLogs(
   modo: AccessMode,
-  limitNum: number = 10
+  limitNum: number = 10,
+  eventId?: string
 ): Promise<AccessLog[]> {
   try {
+    const collectionPath = eventId
+      ? getAccessLogsCollection(eventId)
+      : LEGACY_ACCESS_LOGS_COLLECTION;
+
     const q = query(
-      collection(db, ACCESS_LOGS_COLLECTION),
+      collection(db, collectionPath),
       where('modo', '==', modo),
       where('exito', '==', true),
       orderBy('timestamp', 'desc'),
@@ -362,21 +623,26 @@ export async function getRecentAccessLogs(
     const snapshot = await getDocs(q);
     return snapshot.docs.map((doc) => doc.data() as AccessLog);
   } catch (error) {
-    console.error('Error obteniendo logs recientes:', error);
+    console.error('Error getting recent logs:', error);
     throw error;
   }
 }
 
 /**
- * Suscribirse a los últimos accesos en tiempo real
+ * Subscribe to recent access logs in real-time
  */
 export function subscribeToRecentAccessLogs(
   modo: AccessMode,
   limitNum: number = 10,
-  callback: (logs: AccessLog[]) => void
+  callback: (logs: AccessLog[]) => void,
+  eventId?: string
 ): Unsubscribe {
+  const collectionPath = eventId
+    ? getAccessLogsCollection(eventId)
+    : LEGACY_ACCESS_LOGS_COLLECTION;
+
   const q = query(
-    collection(db, ACCESS_LOGS_COLLECTION),
+    collection(db, collectionPath),
     where('modo', '==', modo),
     where('exito', '==', true),
     orderBy('timestamp', 'desc'),
@@ -390,30 +656,39 @@ export function subscribeToRecentAccessLogs(
 }
 
 /**
- * Obtener estadísticas de acceso para un modo específico
- * Retorna: total de entradas únicas (participantes que han entrado al menos una vez)
+ * Get access statistics for a specific mode
  */
-export async function getAccessStats(modo: AccessMode): Promise<{
+export async function getAccessStats(
+  modo: AccessMode,
+  eventId?: string
+): Promise<{
   uniqueEntrances: number;
   maxSimultaneous: number;
 }> {
   try {
+    const participantsPath = eventId
+      ? getParticipantsCollection(eventId)
+      : LEGACY_PARTICIPANTS_COLLECTION;
+    const logsPath = eventId
+      ? getAccessLogsCollection(eventId)
+      : LEGACY_ACCESS_LOGS_COLLECTION;
+
     if (modo === 'registro') {
-      // Para registro, simplemente contamos los registrados
+      // For registration, just count registered participants
       const q = query(
-        collection(db, PARTICIPANTS_COLLECTION),
+        collection(db, participantsPath),
         where('estado.registrado', '==', true)
       );
       const snapshot = await getDocs(q);
       return {
         uniqueEntrances: snapshot.size,
-        maxSimultaneous: snapshot.size, // El máximo es igual al total (solo se registra una vez)
+        maxSimultaneous: snapshot.size,
       };
     }
 
-    // Para otras salas, necesitamos analizar los logs
+    // For other modes, analyze logs
     const logsQuery = query(
-      collection(db, ACCESS_LOGS_COLLECTION),
+      collection(db, logsPath),
       where('modo', '==', modo),
       where('exito', '==', true),
       orderBy('timestamp', 'asc')
@@ -422,7 +697,7 @@ export async function getAccessStats(modo: AccessMode): Promise<{
     const logsSnapshot = await getDocs(logsQuery);
     const logs = logsSnapshot.docs.map((doc) => doc.data() as AccessLog);
 
-    // Contar participantes únicos que han entrado
+    // Count unique participants who have entered
     const uniqueDNIs = new Set<string>();
     logs.forEach((log) => {
       if (log.direccion === 'entrada') {
@@ -430,19 +705,16 @@ export async function getAccessStats(modo: AccessMode): Promise<{
       }
     });
 
-    // Calcular máximo simultáneo recorriendo el historial
-    let currentCount = 0;
+    // Calculate max simultaneous by traversing history
     let maxCount = 0;
     const currentParticipants = new Set<string>();
 
     logs.forEach((log) => {
       if (log.direccion === 'entrada') {
         currentParticipants.add(log.dni);
-        currentCount = currentParticipants.size;
-        maxCount = Math.max(maxCount, currentCount);
+        maxCount = Math.max(maxCount, currentParticipants.size);
       } else if (log.direccion === 'salida') {
         currentParticipants.delete(log.dni);
-        currentCount = currentParticipants.size;
       }
     });
 
@@ -451,23 +723,26 @@ export async function getAccessStats(modo: AccessMode): Promise<{
       maxSimultaneous: maxCount,
     };
   } catch (error) {
-    console.error('Error obteniendo estadísticas:', error);
+    console.error('Error getting statistics:', error);
     return { uniqueEntrances: 0, maxSimultaneous: 0 };
   }
 }
 
 /**
- * Obtiene los recuentos totales de participantes basados en permisos.
- * Retorna un objeto con el total para cada categoría.
+ * Get counts based on permissions
  */
-export async function getPermissionBasedCounts(): Promise<{
+export async function getPermissionBasedCounts(eventId?: string): Promise<{
   registro: number;
   aula_magna: number;
   master_class: number;
   cena: number;
 }> {
   try {
-    const snapshot = await getDocs(collection(db, PARTICIPANTS_COLLECTION));
+    const collectionPath = eventId
+      ? getParticipantsCollection(eventId)
+      : LEGACY_PARTICIPANTS_COLLECTION;
+
+    const snapshot = await getDocs(collection(db, collectionPath));
 
     const counts = {
       registro: snapshot.size,
@@ -476,7 +751,7 @@ export async function getPermissionBasedCounts(): Promise<{
       cena: 0,
     };
 
-    snapshot.forEach(doc => {
+    snapshot.forEach((doc) => {
       const participant = doc.data() as Participant;
       if (participant.permisos) {
         if (participant.permisos.aula_magna) {
@@ -493,7 +768,7 @@ export async function getPermissionBasedCounts(): Promise<{
 
     return counts;
   } catch (error) {
-    console.error('Error obteniendo recuentos por permisos:', error);
+    console.error('Error getting permission counts:', error);
     return {
       registro: 0,
       aula_magna: 0,
@@ -504,28 +779,29 @@ export async function getPermissionBasedCounts(): Promise<{
 }
 
 /**
- * Exportar todos los datos a Excel
- * Genera un archivo con dos hojas:
- * - Participantes: todos los participantes con sus datos y estados
- * - Logs: historial completo de accesos
- *
- * @returns URI del archivo Excel generado
+ * Export all data to Excel
  */
-export async function exportDataToExcel(): Promise<string> {
+export async function exportDataToExcel(eventId?: string): Promise<string> {
   try {
-    // Obtener todos los participantes
-    const participantsSnapshot = await getDocs(collection(db, PARTICIPANTS_COLLECTION));
-    const participants = participantsSnapshot.docs.map((doc) => doc.data() as Participant);
+    const participantsPath = eventId
+      ? getParticipantsCollection(eventId)
+      : LEGACY_PARTICIPANTS_COLLECTION;
+    const logsPath = eventId
+      ? getAccessLogsCollection(eventId)
+      : LEGACY_ACCESS_LOGS_COLLECTION;
 
-    // Obtener todos los logs (ordenados por fecha)
-    const logsQuery = query(
-      collection(db, ACCESS_LOGS_COLLECTION),
-      orderBy('timestamp', 'desc')
+    // Get all participants
+    const participantsSnapshot = await getDocs(collection(db, participantsPath));
+    const participants = participantsSnapshot.docs.map(
+      (doc) => doc.data() as Participant
     );
+
+    // Get all logs (sorted by date)
+    const logsQuery = query(collection(db, logsPath), orderBy('timestamp', 'desc'));
     const logsSnapshot = await getDocs(logsQuery);
     const logs = logsSnapshot.docs.map((doc) => doc.data() as AccessLog);
 
-    // Preparar datos de participantes para Excel
+    // Prepare participants data for Excel
     const participantsData = participants.map((p) => ({
       DNI: p.dni,
       Nombre: p.nombre,
@@ -538,10 +814,12 @@ export async function exportDataToExcel(): Promise<string> {
       'Fecha Registro': p.timestamp_registro
         ? new Date(p.timestamp_registro).toLocaleString('es-ES')
         : '',
-      'Última Actualización': new Date(p.ultima_actualizacion).toLocaleString('es-ES'),
+      'Última Actualización': new Date(p.ultima_actualizacion).toLocaleString(
+        'es-ES'
+      ),
     }));
 
-    // Preparar datos de logs para Excel
+    // Prepare logs data for Excel
     const logsData = logs.map((log) => ({
       DNI: log.dni,
       Nombre: log.nombre,
@@ -553,28 +831,28 @@ export async function exportDataToExcel(): Promise<string> {
       Mensaje: log.mensaje,
     }));
 
-    // Crear libro de Excel
+    // Create Excel workbook
     const wb = XLSX.utils.book_new();
 
-    // Hoja 1: Participantes
+    // Sheet 1: Participants
     const wsParticipants = XLSX.utils.json_to_sheet(participantsData);
     XLSX.utils.book_append_sheet(wb, wsParticipants, 'Participantes');
 
-    // Hoja 2: Logs
+    // Sheet 2: Logs
     const wsLogs = XLSX.utils.json_to_sheet(logsData);
     XLSX.utils.book_append_sheet(wb, wsLogs, 'Logs de Acceso');
 
     const fileName = `export_congreso_${new Date().toISOString().split('T')[0]}.xlsx`;
 
-    // Detectar plataforma y usar el método apropiado
+    // Detect platform and use appropriate method
     if (Platform.OS === 'web') {
-      // WEB: Descargar usando blob
+      // WEB: Download using blob
       const wbout = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
       const blob = new Blob([wbout], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
 
-      // Crear URL temporal y descargar
+      // Create temporary URL and download
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -584,9 +862,9 @@ export async function exportDataToExcel(): Promise<string> {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      return url; // Retornar URL para confirmar éxito
+      return url;
     } else {
-      // MÓVIL: Usar expo-file-system
+      // MOBILE: Use expo-file-system
       const wbout = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
       const file = new File(Paths.document, fileName);
 
@@ -596,7 +874,125 @@ export async function exportDataToExcel(): Promise<string> {
       return file.uri;
     }
   } catch (error) {
-    console.error('Error exportando datos a Excel:', error);
+    console.error('Error exporting data to Excel:', error);
     throw error;
+  }
+}
+
+/**
+ * Create an individual participant manually
+ */
+export async function createParticipant(
+  participantData: {
+    dni: string;
+    nombre: string;
+    email?: string;
+    telefono?: string;
+    escuela?: string;
+    cargo?: string;
+    acceso?: string;
+    haPagado?: boolean;
+    masterClass?: boolean;
+    cena?: boolean;
+  },
+  eventId?: string
+): Promise<void> {
+  try {
+    const dni = participantData.dni.trim();
+    const collectionPath = eventId
+      ? getParticipantsCollection(eventId)
+      : LEGACY_PARTICIPANTS_COLLECTION;
+
+    // Check if already exists
+    const existing = await getParticipantByDNI(dni, eventId);
+    if (existing) {
+      throw new Error(`Ya existe un participante con DNI ${dni}`);
+    }
+
+    const acceso = participantData.acceso || 'presencial';
+    const isPresencial = acceso.toLowerCase().includes('presencial');
+
+    const participant: Participant = {
+      dni,
+      nombre: participantData.nombre.trim(),
+      email: participantData.email?.trim() || undefined,
+      telefono: participantData.telefono?.trim() || undefined,
+      escuela: participantData.escuela?.trim() || undefined,
+      cargo: participantData.cargo?.trim() || undefined,
+      acceso,
+      haPagado: participantData.haPagado || false,
+      permisos: {
+        aula_magna: isPresencial,
+        master_class: participantData.masterClass || false,
+        cena: participantData.cena || false,
+      },
+      estado: {
+        registrado: false,
+        en_aula_magna: false,
+        en_master_class: false,
+        en_cena: false,
+      },
+      ultima_actualizacion: Date.now(),
+      eventId: eventId || '',
+    };
+
+    const docRef = doc(db, collectionPath, dni);
+    await setDoc(docRef, participant);
+
+    console.log(`✅ Participant ${participantData.nombre} created successfully`);
+  } catch (error) {
+    console.error('Error creating participant:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete all participants for an event
+ */
+export async function deleteAllParticipants(eventId: string): Promise<number> {
+  try {
+    const collectionPath = getParticipantsCollection(eventId);
+    const querySnapshot = await getDocs(collection(db, collectionPath));
+
+    if (querySnapshot.empty) return 0;
+
+    // Process in batches of 500
+    const batchSize = 500;
+    const docs = querySnapshot.docs;
+    let deleted = 0;
+
+    for (let i = 0; i < docs.length; i += batchSize) {
+      const batch = writeBatch(db);
+      const chunk = docs.slice(i, Math.min(i + batchSize, docs.length));
+
+      chunk.forEach((document) => {
+        batch.delete(document.ref);
+      });
+
+      await batch.commit();
+      deleted += chunk.length;
+    }
+
+    return deleted;
+  } catch (error) {
+    console.error('Error deleting all participants:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get participant count for an event
+ */
+export async function getParticipantCount(eventId?: string): Promise<number> {
+  try {
+    const collectionPath = eventId
+      ? getParticipantsCollection(eventId)
+      : LEGACY_PARTICIPANTS_COLLECTION;
+
+    const snapshot = await getDocs(collection(db, collectionPath));
+    return snapshot.size;
+  } catch (error) {
+    console.error('Error getting participant count:', error);
+    return 0;
   }
 }

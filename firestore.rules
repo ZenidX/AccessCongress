@@ -3,30 +3,197 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // REGLAS TEMPORALES PARA IMPORTACIÓN
-    // TODO: Cambiar a reglas más restrictivas en producción
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
 
-    // Permitir lectura y escritura a participants
+    // Get user data from Firestore
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if user is super admin (hardcoded email)
+    function isSuperAdmin() {
+      return isAuthenticated() &&
+             request.auth.token.email.lower() == 'zenid77@gmail.com';
+    }
+
+    // Check if user has a specific role
+    function hasRole(role) {
+      return isAuthenticated() && getUserData().role == role;
+    }
+
+    // Check if user is any admin role
+    function isAnyAdmin() {
+      return isSuperAdmin() ||
+             hasRole('admin_responsable') ||
+             hasRole('admin');
+    }
+
+    // Check if user belongs to organization
+    function belongsToOrganization(orgId) {
+      return isAuthenticated() && getUserData().organizationId == orgId;
+    }
+
+    // Check if user can access event (based on role and assignments)
+    function canAccessEvent(eventId) {
+      let user = getUserData();
+
+      // Super admin can access all events
+      if (isSuperAdmin()) {
+        return true;
+      }
+
+      // Admin roles can access events in their organization
+      if (user.role in ['admin_responsable', 'admin']) {
+        let eventData = get(/databases/$(database)/documents/events/$(eventId)).data;
+        return eventData.organizationId == user.organizationId;
+      }
+
+      // Controllers can only access assigned events
+      if (user.role == 'controlador') {
+        return eventId in user.assignedEventIds;
+      }
+
+      return false;
+    }
+
+    // ============================================
+    // ORGANIZATIONS
+    // ============================================
+    match /organizations/{orgId} {
+      // Super admin can read all
+      // Users can read their own organization
+      allow read: if isSuperAdmin() || belongsToOrganization(orgId);
+
+      // Only super admin can create organizations
+      allow create: if isSuperAdmin();
+
+      // Admin responsable can update their own organization
+      allow update: if isSuperAdmin() ||
+                      (hasRole('admin_responsable') && belongsToOrganization(orgId));
+
+      // Only super admin can delete organizations
+      allow delete: if isSuperAdmin();
+    }
+
+    // ============================================
+    // EVENTS
+    // ============================================
+    match /events/{eventId} {
+      // Allow read if user can access the event
+      allow read: if canAccessEvent(eventId);
+
+      // Admin roles can create events in their organization
+      allow create: if isAnyAdmin();
+
+      // Admin roles can update events they can access
+      allow update: if isAnyAdmin() && canAccessEvent(eventId);
+
+      // Only super admin and admin_responsable can delete events
+      allow delete: if isSuperAdmin() ||
+                      (hasRole('admin_responsable') && canAccessEvent(eventId));
+
+      // ============================================
+      // EVENT PARTICIPANTS (subcollection)
+      // ============================================
+      match /participants/{participantId} {
+        // Anyone who can access the event can read participants
+        allow read: if canAccessEvent(eventId);
+
+        // Admin roles can write participants
+        allow create, update: if isAnyAdmin() && canAccessEvent(eventId);
+
+        // Controllers can update participant status (for scanning)
+        allow update: if hasRole('controlador') && canAccessEvent(eventId);
+
+        // Only admin roles can delete participants
+        allow delete: if isAnyAdmin() && canAccessEvent(eventId);
+      }
+
+      // ============================================
+      // EVENT ACCESS LOGS (subcollection)
+      // ============================================
+      match /access_logs/{logId} {
+        // Anyone who can access the event can read logs
+        allow read: if canAccessEvent(eventId);
+
+        // Anyone who can access the event can create logs (scanning)
+        allow create: if canAccessEvent(eventId);
+
+        // Logs should not be updated or deleted
+        allow update, delete: if false;
+      }
+    }
+
+    // ============================================
+    // USERS
+    // ============================================
+    match /users/{userId} {
+      // Users can read their own data
+      // Super admin can read all users
+      // Admin roles can read users in their organization
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isSuperAdmin() ||
+        (isAnyAdmin() && belongsToOrganization(resource.data.organizationId))
+      );
+
+      // Super admin can create any user
+      // Admin responsable can create admins and controllers in their org
+      // Admins can create controllers in their org
+      allow create: if isSuperAdmin() ||
+                      (hasRole('admin_responsable') &&
+                       request.resource.data.role in ['admin', 'controlador'] &&
+                       request.resource.data.organizationId == getUserData().organizationId) ||
+                      (hasRole('admin') &&
+                       request.resource.data.role == 'controlador' &&
+                       request.resource.data.organizationId == getUserData().organizationId);
+
+      // Users can update their own profile (except role)
+      // Admin roles can update users they manage
+      allow update: if isAuthenticated() && (
+        (request.auth.uid == userId &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'organizationId'])) ||
+        isSuperAdmin() ||
+        (isAnyAdmin() && belongsToOrganization(resource.data.organizationId))
+      );
+
+      // Only super admin can delete users
+      // Admin responsable can delete users in their org (except themselves)
+      allow delete: if isSuperAdmin() ||
+                      (hasRole('admin_responsable') &&
+                       belongsToOrganization(resource.data.organizationId) &&
+                       request.auth.uid != userId);
+    }
+
+    // ============================================
+    // LEGACY COLLECTIONS (for backward compatibility)
+    // ============================================
+
+    // Legacy participants collection (root level)
     match /participants/{participantId} {
-      allow read: if true;  // Permitir lectura pública temporalmente
-      allow write: if true; // Permitir escritura temporalmente para importación
+      allow read: if isAuthenticated();
+      allow write: if isAnyAdmin();
     }
 
-    // Permitir lectura y escritura a access_logs
+    // Legacy access_logs collection (root level)
     match /access_logs/{logId} {
-      allow read: if true;
-      allow write: if true;
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
     }
 
-    // Por defecto, denegar acceso a otras colecciones
+    // ============================================
+    // DEFAULT: Deny all other access
+    // ============================================
     match /{document=**} {
       allow read, write: if false;
     }
   }
 }
-
-// NOTA: Estas son reglas de desarrollo. Para producción, implementa:
-// - Autenticación de usuarios
-// - Validación de datos
-// - Permisos basados en roles
-// Ver INSTRUCCIONES_SETUP.md para reglas de producción recomendadas

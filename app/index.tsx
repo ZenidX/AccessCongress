@@ -15,14 +15,21 @@ import {
   Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ThemedView } from '@/components/themed-view';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed/themed-view';
+import { ThemedText } from '@/components/themed/themed-text';
 import { Colors, BorderRadius, Shadows, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ImpulsWave } from '@/components/visuals/wave-divider';
+import { LoginButton } from '@/components/forms/LoginButton';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function HomeScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
+  const { user } = useAuth();
+
+  // Debug: mostrar el usuario actual
+  console.log('🏠 Index: Usuario actual:', user);
 
   /**
    * Navega a la pantalla del Dashboard en tiempo real
@@ -41,15 +48,28 @@ export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       {/* Header con logo de Impuls Educació y título */}
-      <View style={styles.header}>
-        <Image
-          source={{ uri: 'https://impulseducacio.org/wp-content/uploads/2020/02/logo-web-impuls.png' }}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <ThemedText style={styles.title}>Control de Acceso</ThemedText>
-        <ThemedText style={styles.subtitle}>Congreso 2025</ThemedText>
+      <View style={[styles.header, { backgroundColor: Colors.light.primary }]}>
+        <View style={styles.headerContent}>
+          <Image
+            source={{ uri: 'https://impulseducacio.org/wp-content/uploads/2020/02/logo-web-impuls.png' }}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <Text style={styles.titleWhite}>Control de Acceso</Text>
+          <Text style={styles.subtitleWhite}>Congreso 2025</Text>
+        </View>
+        <View style={styles.loginContainer}>
+          <LoginButton />
+        </View>
       </View>
+
+      {/* Wave divider: transición de azul Impuls a fondo claro */}
+      <ImpulsWave
+        topColor={colorScheme === 'dark' ? Colors.dark.background : Colors.light.background}
+        bottomColor={colorScheme === 'dark' ? Colors.dark.primary : Colors.light.primary}
+        height={80}
+        waves={1}
+      />
 
       {/* Contenido principal */}
       <View style={styles.content}>
@@ -79,24 +99,26 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Botón Administración */}
-          <TouchableOpacity
-            style={[
-              styles.mainButton,
-              Shadows.strong,
-              {
-                backgroundColor: colorScheme === 'dark' ? Colors.dark.accent : Colors.light.accent,
-              },
-            ]}
-            onPress={handleGoToAdmin}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.mainButtonIcon}>⚙️</Text>
-            <Text style={styles.mainButtonText}>Administración</Text>
-            <Text style={styles.mainButtonDescription}>
-              Gestión de participantes y configuración
-            </Text>
-          </TouchableOpacity>
+          {/* Botón Administración - Visible para super_admin, admin_responsable, admin */}
+          {user?.role && ['super_admin', 'admin_responsable', 'admin'].includes(user.role) && (
+            <TouchableOpacity
+              style={[
+                styles.mainButton,
+                Shadows.strong,
+                {
+                  backgroundColor: colorScheme === 'dark' ? Colors.dark.primary : Colors.light.primary,
+                },
+              ]}
+              onPress={handleGoToAdmin}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.mainButtonIcon}>⚙️</Text>
+              <Text style={styles.mainButtonText}>Administración</Text>
+              <Text style={styles.mainButtonDescription}>
+                Gestión de participantes y configuración
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </ThemedView>
@@ -115,7 +137,18 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: Spacing.xl,
     paddingHorizontal: Spacing.lg,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerContent: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  loginContainer: {
+    position: 'absolute',
+    right: Spacing.lg,
+    top: 60,
   },
   logo: {
     width: 200,
@@ -127,9 +160,20 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 5,
   },
+  titleWhite: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginBottom: 5,
+    color: '#fff',
+  },
   subtitle: {
     fontSize: 20,
     opacity: 0.7,
+  },
+  subtitleWhite: {
+    fontSize: 20,
+    opacity: 0.9,
+    color: '#fff',
   },
   content: {
     flex: 1,

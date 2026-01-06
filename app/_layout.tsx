@@ -14,39 +14,67 @@
  */
 
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
+import { useEffect } from 'react';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AppProvider } from '@/contexts/AppContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { EventProvider } from '@/contexts/EventContext';
+
+function InitialLayout() {
+  const { user, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
+
+  useEffect(() => {
+    if (isLoading || !rootNavigationState?.key) {
+      // Esperar a que la autenticación y la navegación estén listas
+      return;
+    }
+
+    const currentSegment = segments[0];
+    const isPublicRoute = segments.length === 0 || currentSegment === 'dashboard';
+
+    if (user) {
+      // Admin access: super_admin, admin_responsable, admin (NOT controlador)
+      const hasAdminAccess = ['super_admin', 'admin_responsable', 'admin'].includes(user.role);
+      if (currentSegment === 'admin' && !hasAdminAccess) {
+        router.replace('/');
+      }
+    } else {
+      if (!isPublicRoute) {
+        router.replace('/');
+      }
+    }
+  }, [user, isLoading, segments, router, rootNavigationState?.key]);
+
+  return (
+    <Stack>
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="scanner" options={{ title: 'Escanear QR' }} />
+      <Stack.Screen name="dashboard" options={{ title: 'Dashboard' }} />
+      <Stack.Screen name="admin" options={{ title: 'Administración' }} />
+    </Stack>
+  );
+}
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    // AppProvider: Proporciona contexto global (modo, dirección, operador) a toda la app
-    <AppProvider>
-      {/* ThemeProvider: Aplica tema claro/oscuro a la navegación */}
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        {/* Stack Navigator: Navegación entre pantallas con transiciones */}
-        <Stack>
-          {/* Pantalla principal: sin header porque tiene logo propio */}
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-
-          {/* Pantalla de scanner con header personalizado */}
-          <Stack.Screen name="scanner" options={{ title: 'Escanear QR' }} />
-
-          {/* Dashboard con header estándar */}
-          <Stack.Screen name="dashboard" options={{ title: 'Dashboard' }} />
-
-          {/* Administración con header estándar */}
-          <Stack.Screen name="admin" options={{ title: 'Administración' }} />
-        </Stack>
-
-        {/* StatusBar: adapta color automáticamente según el tema */}
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </AppProvider>
+    <AuthProvider>
+      <EventProvider>
+        <AppProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <InitialLayout />
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </AppProvider>
+      </EventProvider>
+    </AuthProvider>
   );
 }

@@ -171,30 +171,30 @@ Current rules allow open read/write for development. **Must be restricted for pr
 ### Multi-Device Synchronization
 - App designed for 4 simultaneous devices
 - Firestore real-time listeners prevent race conditions
-- Each QR scan creates document if not exists, then validates against current state
-- `upsertParticipantFromQR()` handles concurrent scans gracefully
+- Each QR scan validates against Firestore (participant must already exist from Excel import)
+- `upsertParticipantFromQR()` queries Firestore for participant data and permissions
 
 ### QR Code Structure
-QR codes must contain JSON with this structure:
+QR codes contain simplified JSON with only identification data:
 ```json
 {
   "dni": "12345678A",
-  "nombre": "Juan Pérez",
-  "permisos": {
-    "aula_magna": true,
-    "master_class": true,
-    "cena": false
-  }
+  "nombre": "Juan Pérez"
 }
 ```
+
+**Important:** Permissions are NOT stored in the QR code. They are validated by querying Firestore using the DNI. This ensures:
+- QR codes are simpler and smaller
+- Permissions can be updated centrally without regenerating QRs
+- Single source of truth (Firestore)
 
 Generated using `tools/generate-qr.html` (offline HTML tool).
 
 ### Validation Flow
-1. Parse QR data
-2. Upsert participant (creates if new, updates name/permisos if exists)
-3. Fetch current participant state from Firestore
-4. Run validation based on mode + direction
+1. Parse QR data (only DNI + nombre)
+2. Query Firestore to get participant data and permissions
+3. Validate participant exists in database (must be imported from Excel first)
+4. Run validation based on mode + direction + permissions from Firestore
 5. If valid: update state + log success
 6. If invalid: only log failure (no state change)
 

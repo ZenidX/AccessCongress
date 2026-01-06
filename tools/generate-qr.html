@@ -239,21 +239,10 @@
             </div>
 
             <div class="form-group">
-                <label>Permisos de Acceso</label>
-                <div class="checkbox-group">
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="aulaMagna" checked disabled>
-                        <label for="aulaMagna">🏛️ Aula Magna (Todos)</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="masterClass">
-                        <label for="masterClass">🎓 Master Class</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="cena">
-                        <label for="cena">🍽️ Cena</label>
-                    </div>
-                </div>
+                <label>ℹ️ Permisos de Acceso</label>
+                <p style="color: #666; font-size: 14px; margin-top: 8px;">
+                    Los permisos se validarán automáticamente desde la base de datos al escanear el QR.
+                </p>
             </div>
 
             <button type="submit">Generar Código QR</button>
@@ -273,18 +262,10 @@
                     <span class="info-value" id="displayNombre"></span>
                 </div>
                 <div class="info-row">
-                    <span class="info-label">Aula Magna:</span>
+                    <span class="info-label">Validación:</span>
                     <span class="info-value">
-                        <span class="badge yes">SÍ</span>
+                        <span class="badge yes">Los permisos se validarán en la base de datos</span>
                     </span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Master Class:</span>
-                    <span class="info-value" id="displayMasterClass"></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Cena:</span>
-                    <span class="info-value" id="displayCena"></span>
                 </div>
             </div>
 
@@ -302,23 +283,16 @@
 
             const dni = document.getElementById('dni').value.trim();
             const nombre = document.getElementById('nombre').value.trim();
-            const masterClass = document.getElementById('masterClass').checked;
-            const cena = document.getElementById('cena').checked;
 
             if (!dni || !nombre) {
                 alert('Por favor completa todos los campos obligatorios');
                 return;
             }
 
-            // Crear objeto JSON para el QR
+            // Crear objeto JSON simplificado para el QR
             const qrData = {
                 dni: dni,
-                nombre: nombre,
-                permisos: {
-                    aula_magna: true,  // Todos tienen acceso
-                    master_class: masterClass,
-                    cena: cena
-                }
+                nombre: nombre
             };
 
             currentQRData = qrData;
@@ -342,10 +316,6 @@
                 // Mostrar información
                 document.getElementById('displayDni').textContent = dni;
                 document.getElementById('displayNombre').textContent = nombre;
-                document.getElementById('displayMasterClass').innerHTML =
-                    `<span class="badge ${masterClass ? 'yes' : 'no'}">${masterClass ? 'SÍ' : 'NO'}</span>`;
-                document.getElementById('displayCena').innerHTML =
-                    `<span class="badge ${cena ? 'yes' : 'no'}">${cena ? 'SÍ' : 'NO'}</span>`;
 
                 // Mostrar resultado
                 document.getElementById('qrResult').classList.add('show');

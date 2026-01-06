@@ -93,13 +93,14 @@ export const Fonts = Platform.select({
 });
 
 // Spacing and border radius following Impuls Educació design system
+// Reducidos para mejor aprovechamiento del espacio
 export const Spacing = {
-  xs: 8,
-  sm: 12,
-  md: 16,
-  lg: 20,
-  xl: 24,
-  xxl: 32,
+  xs: 6,
+  sm: 10,
+  md: 14,
+  lg: 18,
+  xl: 22,
+  xxl: 28,
 };
 
 export const BorderRadius = {
@@ -108,6 +109,17 @@ export const BorderRadius = {
   lg: 16,
   xl: 20,
   full: 9999, // Pill-shaped buttons like Impuls Educació
+};
+
+// Tamaños de fuente aumentados para mejor legibilidad
+export const FontSizes = {
+  xs: 15,
+  sm: 17,
+  md: 19,
+  lg: 21,
+  xl: 24,
+  xxl: 28,
+  xxxl: 32,
 };
 
 export const Shadows = {
