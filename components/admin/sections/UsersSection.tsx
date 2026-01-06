@@ -28,8 +28,11 @@ import {
   updateUserRole,
   deleteUserFromFirestore,
   updateUserOrganization,
+  assignEventsToUser,
 } from '@/services/userService';
+import { getEventsByOrganization } from '@/services/eventService';
 import { User, UserRole, canManageRole, getCreatableRoles } from '@/types/user';
+import { Event } from '@/types/event';
 import { Colors, BorderRadius, Spacing, Shadows, FontSizes } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -73,6 +76,13 @@ export function UsersSection() {
   const [showEditRoleModal, setShowEditRoleModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
+  // Assign events modal state
+  const [showAssignEventsModal, setShowAssignEventsModal] = useState(false);
+  const [selectedControlador, setSelectedControlador] = useState<User | null>(null);
+  const [availableEvents, setAvailableEvents] = useState<Event[]>([]);
+  const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
+
   // Load admin responsables for super_admin
   const loadAdminResponsables = useCallback(async () => {
     if (!user || !isSuperAdmin()) return;
@@ -94,8 +104,10 @@ export function UsersSection() {
       let usersList: User[] = [];
 
       if (isSuperAdmin()) {
-        if (selectedAdminResponsable?.organizationId) {
-          const orgUsers = await getUsersByOrganization(selectedAdminResponsable.organizationId);
+        // For admin_responsable, their UID IS their organizationId (fallback for backwards compatibility)
+        const orgId = selectedAdminResponsable?.organizationId || selectedAdminResponsable?.uid;
+        if (orgId) {
+          const orgUsers = await getUsersByOrganization(orgId);
           usersList = orgUsers.filter(u => u.role === 'admin' || u.role === 'controlador');
         }
       } else if (user.role === 'admin_responsable') {
@@ -161,12 +173,14 @@ export function UsersSection() {
       if (newUserRole === 'admin_responsable') {
         orgId = null; // Will be set to own UID after creation
       } else if (isSuperAdmin()) {
-        if (!selectedAdminResponsable?.organizationId) {
+        // For admin_responsable, their UID IS their organizationId (fallback for backwards compatibility)
+        const selectedOrgId = selectedAdminResponsable?.organizationId || selectedAdminResponsable?.uid;
+        if (!selectedOrgId) {
           setLoading(false);
           Alert.alert('Error', 'Selecciona un Administrador Responsable primero');
           return;
         }
-        orgId = selectedAdminResponsable.organizationId;
+        orgId = selectedOrgId;
       } else {
         orgId = user.organizationId || null;
       }
@@ -271,6 +285,67 @@ export function UsersSection() {
     }
   };
 
+  // Open assign events modal
+  const handleOpenAssignEvents = async (controlador: User) => {
+    setSelectedControlador(controlador);
+    setSelectedEventIds(controlador.assignedEventIds || []);
+    setShowAssignEventsModal(true);
+    setLoadingEvents(true);
+
+    try {
+      // Get organization ID
+      let orgId: string | null = null;
+      if (isSuperAdmin()) {
+        orgId = selectedAdminResponsable?.organizationId || selectedAdminResponsable?.uid || null;
+      } else {
+        orgId = user?.organizationId || null;
+      }
+
+      if (orgId) {
+        const events = await getEventsByOrganization(orgId);
+        setAvailableEvents(events);
+      } else {
+        setAvailableEvents([]);
+      }
+    } catch (error) {
+      console.error('Error loading events:', error);
+      setAvailableEvents([]);
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+
+  // Toggle event selection
+  const toggleEventSelection = (eventId: string) => {
+    setSelectedEventIds(prev =>
+      prev.includes(eventId)
+        ? prev.filter(id => id !== eventId)
+        : [...prev, eventId]
+    );
+  };
+
+  // Save assigned events
+  const handleSaveAssignedEvents = async () => {
+    if (!selectedControlador) return;
+
+    try {
+      setLoading(true);
+      await assignEventsToUser(selectedControlador.uid, selectedEventIds);
+      setLoading(false);
+      setShowAssignEventsModal(false);
+      await loadUsers();
+
+      Alert.alert(
+        'Eventos asignados',
+        `Se han asignado ${selectedEventIds.length} evento(s) a ${selectedControlador.username}.`
+      );
+    } catch (error) {
+      setLoading(false);
+      console.error('Error saving assigned events:', error);
+      Alert.alert('Error', 'No se pudieron guardar los eventos asignados');
+    }
+  };
+
   // Render user card
   const renderUserCard = (userData: User) => {
     const canManage = user && canManageRole(user.role, userData.role);
@@ -298,6 +373,17 @@ export function UsersSection() {
 
         {canManage && !isCurrentUser && (
           <View style={styles.userCardActions}>
+            {userData.role === 'controlador' && (
+              <TouchableOpacity
+                style={[styles.userActionButton, { backgroundColor: Colors.light.success }]}
+                onPress={() => handleOpenAssignEvents(userData)}
+                disabled={loading}
+              >
+                <Text style={styles.userActionButtonText}>
+                  📅 Eventos ({userData.assignedEventIds?.length || 0})
+                </Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[styles.userActionButton, { backgroundColor: Colors.light.primary }]}
               onPress={() => {
@@ -654,6 +740,90 @@ export function UsersSection() {
           </View>
         </View>
       </Modal>
+
+      {/* Assign Events Modal */}
+      <Modal
+        visible={showAssignEventsModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAssignEventsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground, maxHeight: '80%' }]}>
+            <ThemedText style={styles.modalTitle}>
+              Asignar Eventos a {selectedControlador?.username}
+            </ThemedText>
+
+            <ThemedText style={styles.modalSubtitle}>
+              Selecciona los eventos que este controlador podrá gestionar
+            </ThemedText>
+
+            {loadingEvents ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={Colors.light.primary} />
+                <ThemedText style={{ marginTop: Spacing.md }}>Cargando eventos...</ThemedText>
+              </View>
+            ) : availableEvents.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <ThemedText style={styles.emptyText}>
+                  No hay eventos disponibles en esta organización
+                </ThemedText>
+              </View>
+            ) : (
+              <ScrollView style={styles.eventsList}>
+                {availableEvents.map((event) => (
+                  <TouchableOpacity
+                    key={event.id}
+                    style={[
+                      styles.eventCheckItem,
+                      selectedEventIds.includes(event.id) && styles.eventCheckItemSelected,
+                      { backgroundColor: selectedEventIds.includes(event.id)
+                        ? Colors.light.success + '20'
+                        : Colors[colorScheme ?? 'light'].background
+                      },
+                    ]}
+                    onPress={() => toggleEventSelection(event.id)}
+                  >
+                    <View style={styles.eventCheckBox}>
+                      {selectedEventIds.includes(event.id) ? (
+                        <Text style={styles.eventCheckMark}>✓</Text>
+                      ) : null}
+                    </View>
+                    <View style={styles.eventCheckInfo}>
+                      <ThemedText style={styles.eventCheckName}>{event.name}</ThemedText>
+                      <ThemedText style={styles.eventCheckDate}>
+                        {new Date(event.date).toLocaleDateString('es-ES', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </ThemedText>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setShowAssignEventsModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.submitButton, { backgroundColor: Colors.light.success }]}
+                onPress={handleSaveAssignedEvents}
+                disabled={loading}
+              >
+                <Text style={styles.submitButtonText}>
+                  Guardar ({selectedEventIds.length})
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -884,5 +1054,67 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  // Assign events modal styles
+  modalSubtitle: {
+    fontSize: FontSizes.sm,
+    opacity: 0.7,
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
+  },
+  loadingContainer: {
+    padding: Spacing.xl,
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    padding: Spacing.xl,
+    alignItems: 'center',
+  },
+  emptyText: {
+    opacity: 0.7,
+    textAlign: 'center',
+  },
+  eventsList: {
+    maxHeight: 300,
+    marginBottom: Spacing.md,
+  },
+  eventCheckItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  eventCheckItemSelected: {
+    borderColor: Colors.light.success,
+  },
+  eventCheckBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: Colors.light.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.md,
+  },
+  eventCheckMark: {
+    color: Colors.light.success,
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  eventCheckInfo: {
+    flex: 1,
+  },
+  eventCheckName: {
+    fontWeight: '600',
+    fontSize: FontSizes.md,
+  },
+  eventCheckDate: {
+    fontSize: FontSizes.sm,
+    opacity: 0.7,
+    marginTop: 2,
   },
 });

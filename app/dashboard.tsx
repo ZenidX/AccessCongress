@@ -11,7 +11,7 @@
  * cuando un participante entra o sale de una ubicación.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,8 @@ import {
   Image,
   ScrollView,
   Platform,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed/themed-view';
@@ -34,6 +36,7 @@ import {
   getPermissionBasedCounts,
 } from '@/services/participantService';
 import { Participant, AccessMode, AccessDirection, AccessLog } from '@/types/participant';
+import { Event } from '@/types/event';
 import { Colors, BorderRadius, Spacing, Shadows, FontSizes } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useApp } from '@/contexts/AppContext';
@@ -41,6 +44,7 @@ import { LoginButton } from '@/components/forms/LoginButton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEvent } from '@/contexts/EventContext';
 import { BackButton } from '@/components/navigation/BackButton';
+import { getAllEvents, getEventsByOrganization, getEventsByIds } from '@/services/eventService';
 
 type Location = 'registrados' | 'aula_magna' | 'master_class' | 'cena';
 
@@ -86,10 +90,15 @@ export default function DashboardScreen() {
   const { setModo, setDireccion } = useApp();
 
   // Usuario autenticado (necesario para habilitar escaneo)
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
 
   // Evento activo (para filtrar participantes)
-  const { currentEvent } = useEvent();
+  const { currentEvent, setCurrentEvent } = useEvent();
+
+  // Estado para el selector de eventos
+  const [showEventSelector, setShowEventSelector] = useState(!currentEvent);
+  const [availableEvents, setAvailableEvents] = useState<Event[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(true);
 
   // Modo/ubicación seleccionado (unificado para escaneo y estadísticas)
   const [selectedMode, setSelectedMode] = useState<AccessMode>('registro');
@@ -120,6 +129,76 @@ export default function DashboardScreen() {
     master_class: 0,
     cena: 0,
   });
+
+  /**
+   * Cargar eventos disponibles según el rol del usuario
+   */
+  const loadAvailableEvents = useCallback(async () => {
+    if (!user) {
+      setAvailableEvents([]);
+      setLoadingEvents(false);
+      return;
+    }
+
+    setLoadingEvents(true);
+    try {
+      let events: Event[];
+
+      if (isSuperAdmin()) {
+        // Super admin ve todos los eventos
+        events = await getAllEvents();
+      } else if (user.role === 'controlador') {
+        // Controlador solo ve eventos asignados
+        if (user.assignedEventIds && user.assignedEventIds.length > 0) {
+          events = await getEventsByIds(user.assignedEventIds);
+        } else {
+          events = [];
+        }
+      } else if (user.organizationId) {
+        // Admin responsable y admin ven eventos de su organización
+        events = await getEventsByOrganization(user.organizationId);
+      } else {
+        events = [];
+      }
+
+      // Ordenar por fecha (más reciente primero)
+      events.sort((a, b) => b.date - a.date);
+      setAvailableEvents(events);
+    } catch (error) {
+      console.error('Error loading events:', error);
+      setAvailableEvents([]);
+    } finally {
+      setLoadingEvents(false);
+    }
+  }, [user, isSuperAdmin]);
+
+  // Auto-seleccionar si solo hay un evento (separado para evitar bucles)
+  useEffect(() => {
+    if (!loadingEvents && availableEvents.length === 1 && !currentEvent) {
+      setCurrentEvent(availableEvents[0]);
+      setShowEventSelector(false);
+    }
+  }, [loadingEvents, availableEvents, currentEvent, setCurrentEvent]);
+
+  // Cargar eventos cuando cambia el usuario
+  useEffect(() => {
+    loadAvailableEvents();
+  }, [loadAvailableEvents]);
+
+  // Mostrar selector si no hay evento seleccionado
+  useEffect(() => {
+    if (!currentEvent && !loadingEvents && availableEvents.length > 0) {
+      setShowEventSelector(true);
+    }
+  }, [currentEvent, loadingEvents, availableEvents]);
+
+  /**
+   * Seleccionar un evento
+   */
+  const handleSelectEvent = (event: Event) => {
+    setCurrentEvent(event);
+    setShowEventSelector(false);
+  };
 
   /**
    * Suscripción en tiempo real a Firestore
@@ -260,6 +339,132 @@ export default function DashboardScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      {/* Modal selector de eventos */}
+      <Modal
+        visible={showEventSelector}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => currentEvent && setShowEventSelector(false)}
+      >
+        <ThemedView style={styles.eventSelectorModal}>
+          <View style={styles.eventSelectorHeader}>
+            <Image
+              source={{ uri: 'https://impulseducacio.org/wp-content/uploads/2020/02/logo-web-impuls.png' }}
+              style={styles.eventSelectorLogo}
+              resizeMode="contain"
+            />
+            <ThemedText style={styles.eventSelectorTitle}>
+              Selecciona un Evento
+            </ThemedText>
+            <ThemedText style={styles.eventSelectorSubtitle}>
+              ¿Para qué evento quieres hacer control de acceso?
+            </ThemedText>
+          </View>
+
+          {loadingEvents ? (
+            <View style={styles.eventSelectorLoading}>
+              <ActivityIndicator size="large" color={Colors.light.primary} />
+              <ThemedText style={{ marginTop: Spacing.md }}>Cargando eventos...</ThemedText>
+            </View>
+          ) : availableEvents.length === 0 ? (
+            <View style={styles.eventSelectorEmpty}>
+              <Text style={styles.eventSelectorEmptyIcon}>📭</Text>
+              <ThemedText style={styles.eventSelectorEmptyText}>
+                {!user
+                  ? 'Inicia sesión para ver los eventos disponibles'
+                  : user.role === 'controlador'
+                  ? 'No tienes eventos asignados. Contacta con tu administrador.'
+                  : !user.organizationId
+                  ? 'Tu cuenta no tiene organización asignada. Contacta con tu administrador.'
+                  : 'No hay eventos disponibles en tu organización.'}
+              </ThemedText>
+              {!user && (
+                <View style={{ marginTop: Spacing.lg }}>
+                  <LoginButton />
+                </View>
+              )}
+            </View>
+          ) : (
+            <ScrollView style={styles.eventSelectorList}>
+              {availableEvents.map((event) => (
+                <TouchableOpacity
+                  key={event.id}
+                  style={[
+                    styles.eventSelectorCard,
+                    Shadows.medium,
+                    {
+                      backgroundColor: colorScheme === 'dark'
+                        ? Colors.dark.cardBackground
+                        : Colors.light.cardBackground,
+                      borderColor: event.status === 'active'
+                        ? Colors.light.success
+                        : Colors.light.border,
+                      borderWidth: event.status === 'active' ? 2 : 1,
+                    },
+                  ]}
+                  onPress={() => handleSelectEvent(event)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.eventSelectorCardContent}>
+                    <View style={styles.eventSelectorCardHeader}>
+                      <Text style={[styles.eventSelectorCardName, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}>
+                        {event.name}
+                      </Text>
+                      {event.status === 'active' && (
+                        <View style={[styles.eventStatusBadge, { backgroundColor: Colors.light.success }]}>
+                          <Text style={styles.eventStatusBadgeText}>Activo</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.eventSelectorCardDate, { color: colorScheme === 'dark' ? '#ccc' : '#666' }]}>
+                      📅 {new Date(event.date).toLocaleDateString('es-ES', {
+                        weekday: 'long',
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric',
+                      })}
+                    </Text>
+                    {event.location && (
+                      <Text style={[styles.eventSelectorCardLocation, { color: colorScheme === 'dark' ? '#ccc' : '#666' }]}>
+                        📍 {event.location}
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={styles.eventSelectorCardArrow}>→</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+
+          {/* Botón para volver si ya hay evento seleccionado */}
+          {currentEvent && (
+            <View style={styles.eventSelectorFooter}>
+              <TouchableOpacity
+                style={[styles.eventSelectorCancelButton, { backgroundColor: Colors.light.border }]}
+                onPress={() => setShowEventSelector(false)}
+              >
+                <Text style={styles.eventSelectorCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Botón volver a inicio */}
+          <View style={styles.eventSelectorBackRow}>
+            <TouchableOpacity
+              style={styles.eventSelectorBackButton}
+              onPress={() => {
+                setShowEventSelector(false);
+                router.replace('/');
+              }}
+            >
+              <Text style={[styles.eventSelectorBackText, { color: Colors.light.primary }]}>
+                ← Volver al inicio
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ThemedView>
+      </Modal>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header: Logo + Login */}
         <View style={styles.headerContainer}>
@@ -275,26 +480,35 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Current event indicator */}
+        {/* Current event indicator - clickable to change */}
         {currentEvent ? (
-          <View style={[styles.eventBanner, { backgroundColor: Colors.light.success + '20' }]}>
+          <TouchableOpacity
+            style={[styles.eventBanner, { backgroundColor: Colors.light.success + '20' }]}
+            onPress={() => setShowEventSelector(true)}
+            activeOpacity={0.7}
+          >
             <Text style={[styles.eventBannerIcon]}>📅</Text>
             <View style={styles.eventBannerText}>
               <Text style={[styles.eventBannerLabel, { color: Colors.light.success }]}>
-                Evento activo
+                Evento activo (toca para cambiar)
               </Text>
               <Text style={[styles.eventBannerName, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}>
                 {currentEvent.name}
               </Text>
             </View>
-          </View>
+            <Text style={styles.eventBannerChangeIcon}>✏️</Text>
+          </TouchableOpacity>
         ) : (
-          <View style={[styles.eventBanner, { backgroundColor: Colors.light.warning + '20' }]}>
+          <TouchableOpacity
+            style={[styles.eventBanner, { backgroundColor: Colors.light.warning + '20' }]}
+            onPress={() => setShowEventSelector(true)}
+            activeOpacity={0.7}
+          >
             <Text style={[styles.eventBannerIcon]}>⚠️</Text>
             <Text style={[styles.eventBannerLabel, { color: Colors.light.warning }]}>
-              Selecciona un evento en Administración
+              Toca para seleccionar un evento
             </Text>
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* Selector de Modo (unificado para escaneo y estadísticas) */}
@@ -952,5 +1166,127 @@ const styles = StyleSheet.create({
   eventBannerName: {
     fontSize: FontSizes.md,
     fontWeight: 'bold',
+  },
+  eventBannerChangeIcon: {
+    fontSize: 18,
+    marginLeft: Spacing.sm,
+  },
+  // Event Selector Modal styles
+  eventSelectorModal: {
+    flex: 1,
+    paddingTop: 60,
+  },
+  eventSelectorHeader: {
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.lg,
+  },
+  eventSelectorLogo: {
+    width: 160,
+    height: 55,
+    marginBottom: Spacing.lg,
+  },
+  eventSelectorTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
+  },
+  eventSelectorSubtitle: {
+    fontSize: FontSizes.md,
+    opacity: 0.7,
+    textAlign: 'center',
+  },
+  eventSelectorLoading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eventSelectorEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  eventSelectorEmptyIcon: {
+    fontSize: 80,
+    marginBottom: Spacing.lg,
+  },
+  eventSelectorEmptyText: {
+    fontSize: FontSizes.lg,
+    textAlign: 'center',
+    opacity: 0.7,
+  },
+  eventSelectorList: {
+    flex: 1,
+    paddingHorizontal: Spacing.lg,
+  },
+  eventSelectorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    marginBottom: Spacing.md,
+  },
+  eventSelectorCardContent: {
+    flex: 1,
+  },
+  eventSelectorCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  eventSelectorCardName: {
+    fontSize: FontSizes.lg,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  eventStatusBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+  },
+  eventStatusBadgeText: {
+    color: '#fff',
+    fontSize: FontSizes.xs,
+    fontWeight: 'bold',
+  },
+  eventSelectorCardDate: {
+    fontSize: FontSizes.sm,
+    marginBottom: 4,
+  },
+  eventSelectorCardLocation: {
+    fontSize: FontSizes.sm,
+  },
+  eventSelectorCardArrow: {
+    fontSize: 24,
+    color: Colors.light.primary,
+    marginLeft: Spacing.md,
+  },
+  eventSelectorFooter: {
+    padding: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  eventSelectorCancelButton: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+  },
+  eventSelectorCancelText: {
+    fontSize: FontSizes.md,
+    fontWeight: '600',
+  },
+  eventSelectorBackRow: {
+    padding: Spacing.md,
+    alignItems: 'center',
+  },
+  eventSelectorBackButton: {
+    padding: Spacing.sm,
+  },
+  eventSelectorBackText: {
+    fontSize: FontSizes.md,
+    fontWeight: '600',
   },
 });

@@ -50,7 +50,7 @@ service cloud.firestore {
       // Controllers can only access assigned events
       return isSuperAdmin() ||
              (user.role in ['admin_responsable', 'admin'] && eventData.organizationId == user.organizationId) ||
-             (user.role == 'controlador' && eventId in user.assignedEventIds);
+             (user.role == 'controlador' && 'assignedEventIds' in user && eventId in user.assignedEventIds);
     }
 
     // ============================================
@@ -77,7 +77,14 @@ service cloud.firestore {
     // ============================================
     match /events/{eventId} {
       // Allow read if user can access the event
-      allow read: if canAccessEvent(eventId);
+      // NOTE: Using resource.data instead of canAccessEvent() for queries to work
+      // canAccessEvent uses get() which doesn't work for list queries
+      allow read: if isSuperAdmin() ||
+                    (getUserData().role in ['admin_responsable', 'admin'] &&
+                     resource.data.organizationId == getUserData().organizationId) ||
+                    (getUserData().role == 'controlador' &&
+                     'assignedEventIds' in getUserData() &&
+                     eventId in getUserData().assignedEventIds);
 
       // Admin roles can create events in their organization
       allow create: if isAnyAdmin();

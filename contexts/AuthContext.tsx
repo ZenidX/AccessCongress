@@ -75,12 +75,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ? 'super_admin'
           : (userData.role as UserRole) || 'controlador';
 
+        // For admin_responsable, their UID IS their organizationId
+        // This ensures backwards compatibility for users created before this logic was added
+        const organizationId = role === 'admin_responsable'
+          ? (userData.organizationId || firebaseUser.uid)
+          : (userData.organizationId || null);
+
         return {
           uid: firebaseUser.uid,
           email: firebaseUser.email || '',
           username: userData.username || firebaseUser.email?.split('@')[0] || '',
           role,
-          organizationId: userData.organizationId || null,
+          organizationId,
           assignedEventIds: userData.assignedEventIds || [],
           createdAt: userData.createdAt || Date.now(),
           createdBy: userData.createdBy,
@@ -140,8 +146,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string): Promise<LoginResult> => {
     try {
       console.log('🔑 AuthContext: Attempting login with email:', email);
-      await signInWithEmailAndPassword(auth, email, password);
-      console.log('✅ AuthContext: Login successful, waiting for onAuthStateChanged...');
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log('✅ AuthContext: Login successful, fetching user data...');
+
+      // Wait for user data to be fetched before returning
+      // This ensures the UI updates properly after login
+      const userData = await fetchUserData(userCredential.user);
+      setUser(userData);
+      console.log('✅ AuthContext: User data loaded:', userData?.email);
+
       return { success: true };
     } catch (error: any) {
       let errorMessage = 'Error al iniciar sesión. Por favor intenta de nuevo.';

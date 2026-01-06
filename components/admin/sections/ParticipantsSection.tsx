@@ -74,11 +74,19 @@ export function ParticipantsSection() {
   useEffect(() => {
     const loadEvents = async () => {
       if (!user) {
+        console.log('🔴 ParticipantsSection: No user');
         setEvents([]);
         setOrgNames({});
         setLoadingEvents(false);
         return;
       }
+
+      console.log('🔵 ParticipantsSection: Loading events for user:', {
+        email: user.email,
+        role: user.role,
+        organizationId: user.organizationId,
+        isSuperAdmin: isSuperAdmin(),
+      });
 
       setLoadingEvents(true);
       try {
@@ -86,13 +94,22 @@ export function ParticipantsSection() {
 
         if (isSuperAdmin()) {
           // Super admin sees all events
+          console.log('🟢 ParticipantsSection: Fetching ALL events (super_admin)');
           eventList = await getAllEvents();
         } else if (user.organizationId) {
           // Other admins see only their organization's events
+          console.log('🟢 ParticipantsSection: Fetching events for org:', user.organizationId);
           eventList = await getEventsByOrganization(user.organizationId);
         } else {
+          console.log('🔴 ParticipantsSection: No organizationId, empty list');
           eventList = [];
         }
+
+        console.log('🟣 ParticipantsSection: Found events:', eventList.length);
+        eventList.forEach(e => {
+          console.log(`   📅 Event: "${e.name}" | orgId: ${e.organizationId} | createdBy: ${e.createdBy}`);
+        });
+        console.log(`🔍 ParticipantsSection: User orgId: ${user.organizationId} | User UID: ${user.uid}`);
 
         // Sort by date (most recent first)
         eventList.sort((a, b) => b.date - a.date);
@@ -181,7 +198,10 @@ export function ParticipantsSection() {
 
       let count = 0;
       if (isExcel) {
-        count = await importParticipantsFromExcel(fileUri, currentEvent.id, importMode);
+        // Fetch file and convert to ArrayBuffer for Excel import
+        const response = await fetch(fileUri);
+        const arrayBuffer = await response.arrayBuffer();
+        count = await importParticipantsFromExcel(arrayBuffer, currentEvent.id, importMode);
       } else {
         const response = await fetch(fileUri);
         const csvContent = await response.text();

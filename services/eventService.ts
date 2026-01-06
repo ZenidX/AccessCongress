@@ -144,28 +144,27 @@ export async function getAllEvents(): Promise<Event[]> {
 
 /**
  * Get events assigned to a user (for controllers)
+ * Uses individual document fetches instead of list queries
+ * to work with security rules that check assignedEventIds
  */
 export async function getEventsByIds(eventIds: string[]): Promise<Event[]> {
   if (eventIds.length === 0) return [];
 
-  // Firestore 'in' query is limited to 10 items
-  const chunks: string[][] = [];
-  for (let i = 0; i < eventIds.length; i += 10) {
-    chunks.push(eventIds.slice(i, i + 10));
+  const events: Event[] = [];
+
+  // Fetch each document individually to comply with security rules
+  for (const eventId of eventIds) {
+    try {
+      const eventDoc = await getDoc(doc(db, EVENTS_COLLECTION, eventId));
+      if (eventDoc.exists()) {
+        events.push(eventDoc.data() as Event);
+      }
+    } catch (error) {
+      console.warn(`Could not fetch event ${eventId}:`, error);
+    }
   }
 
-  const allEvents: Event[] = [];
-
-  for (const chunk of chunks) {
-    const q = query(
-      collection(db, EVENTS_COLLECTION),
-      where('id', 'in', chunk)
-    );
-    const snapshot = await getDocs(q);
-    allEvents.push(...snapshot.docs.map((doc) => doc.data() as Event));
-  }
-
-  return allEvents;
+  return events;
 }
 
 /**
