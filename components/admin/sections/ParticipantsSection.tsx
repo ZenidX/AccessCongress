@@ -41,10 +41,13 @@ import { Event } from '@/types/event';
 import { Colors, BorderRadius, Spacing, Shadows, FontSizes } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEvent } from '@/contexts/EventContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { getEventsByOrganization, getAllEvents } from '@/services/eventService';
 
 export function ParticipantsSection() {
   const colorScheme = useColorScheme();
-  const { currentEvent, setCurrentEvent, availableEvents, isLoadingEvents } = useEvent();
+  const { currentEvent, setCurrentEvent } = useEvent();
+  const { user, isSuperAdmin } = useAuth();
 
   // State
   const [loading, setLoading] = useState(false);
@@ -52,12 +55,58 @@ export function ParticipantsSection() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
 
+  // Local events state (fetch directly like EventManager)
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+
   // Add participant modal state
   const [showAddParticipantModal, setShowAddParticipantModal] = useState(false);
   const [newParticipantDNI, setNewParticipantDNI] = useState('');
   const [newParticipantNombre, setNewParticipantNombre] = useState('');
   const [newParticipantEmail, setNewParticipantEmail] = useState('');
   const [newParticipantTelefono, setNewParticipantTelefono] = useState('');
+
+  // Load events directly (same logic as EventManager)
+  useEffect(() => {
+    const loadEvents = async () => {
+      if (!user) {
+        setEvents([]);
+        setLoadingEvents(false);
+        return;
+      }
+
+      setLoadingEvents(true);
+      try {
+        let eventList: Event[];
+
+        if (isSuperAdmin()) {
+          // Super admin sees all events
+          eventList = await getAllEvents();
+        } else if (user.organizationId) {
+          // Other admins see only their organization's events
+          eventList = await getEventsByOrganization(user.organizationId);
+        } else {
+          eventList = [];
+        }
+
+        // Sort by date (most recent first)
+        eventList.sort((a, b) => b.date - a.date);
+        setEvents(eventList);
+
+        // Auto-select first event if none selected
+        if (!currentEvent && eventList.length > 0) {
+          setCurrentEvent(eventList[0]);
+        }
+      } catch (error) {
+        console.error('Error loading events:', error);
+        setEvents([]);
+      } finally {
+        setLoadingEvents(false);
+      }
+    };
+
+    loadEvents();
+  }, [user, isSuperAdmin]);
 
   // Load participants when event changes
   useEffect(() => {
@@ -302,9 +351,9 @@ export function ParticipantsSection() {
       {/* Event selector */}
       <View style={styles.eventSelectorSection}>
         <ThemedText style={styles.fieldLabel}>Evento:</ThemedText>
-        {isLoadingEvents ? (
+        {loadingEvents ? (
           <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].primary} />
-        ) : availableEvents.length === 0 ? (
+        ) : events.length === 0 ? (
           <View style={[
             styles.warningBanner,
             { backgroundColor: Colors[colorScheme ?? 'light'].warning + '20' }
@@ -315,7 +364,7 @@ export function ParticipantsSection() {
           </View>
         ) : (
           <View style={styles.eventSelectorList}>
-            {availableEvents.map((event) => (
+            {events.map((event) => (
               <TouchableOpacity
                 key={event.id}
                 style={[
@@ -754,11 +803,13 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xs,
   },
   modeOption: {
+    flex: 1,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: Colors.light.border,
+    alignItems: 'center',
   },
   modeOptionText: {
     fontSize: FontSizes.sm,

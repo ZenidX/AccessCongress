@@ -210,7 +210,7 @@ export default function AdminScreen() {
 
           {/* Footer para el botón de volver */}
           <View style={styles.footer}>
-            <BackButton style={{ margin: 0 }} />
+            <BackButton style={{ margin: 0, width: '100%' }} />
           </View>
         </View>
       </View>
