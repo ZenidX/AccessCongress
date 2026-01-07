@@ -74,7 +74,10 @@ export async function getAllOrganizations(): Promise<Organization[]> {
   );
 
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => doc.data() as Organization);
+  return snapshot.docs.map((docSnap) => ({
+    ...docSnap.data(),
+    id: docSnap.id, // Ensure ID is always set from document ID
+  } as Organization));
 }
 
 /**
