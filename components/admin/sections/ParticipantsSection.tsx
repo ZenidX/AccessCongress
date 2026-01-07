@@ -1065,7 +1065,7 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
   },
   leftColumn: {
-    width: 350,
+    width: 420,
     flexShrink: 0,
   },
   rightColumn: {
