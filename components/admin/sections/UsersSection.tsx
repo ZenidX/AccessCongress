@@ -18,6 +18,7 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  Platform,
 } from 'react-native';
 import { ThemedText } from '@/components/themed/themed-text';
 import { RoleBadge } from '@/components/data-display/RoleBadge';
@@ -221,50 +222,70 @@ export function UsersSection() {
   };
 
   // Delete user
-  const handleDeleteUser = (targetUser: User) => {
+  const handleDeleteUser = async (targetUser: User) => {
     if (!user || !canManageRole(user.role, targetUser.role)) {
-      Alert.alert('Error', 'No tienes permisos para eliminar este usuario');
+      if (Platform.OS === 'web') {
+        window.alert('No tienes permisos para eliminar este usuario');
+      } else {
+        Alert.alert('Error', 'No tienes permisos para eliminar este usuario');
+      }
       return;
     }
 
     if (targetUser.uid === user.uid) {
-      Alert.alert('Error', 'No puedes eliminarte a ti mismo');
+      if (Platform.OS === 'web') {
+        window.alert('No puedes eliminarte a ti mismo');
+      } else {
+        Alert.alert('Error', 'No puedes eliminarte a ti mismo');
+      }
       return;
     }
 
-    Alert.alert(
-      'Eliminar usuario',
-      `¿Estás seguro de que quieres eliminar a ${targetUser.email}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              await deleteUserFromFirestore(targetUser.uid);
-              setLoading(false);
+    // Confirmación según plataforma
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`¿Estás seguro de que quieres eliminar a ${targetUser.email}?`)
+      : await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            'Eliminar usuario',
+            `¿Estás seguro de que quieres eliminar a ${targetUser.email}?`,
+            [
+              { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Eliminar', style: 'destructive', onPress: () => resolve(true) },
+            ]
+          );
+        });
 
-              if (selectedAdminResponsable?.uid === targetUser.uid) {
-                setSelectedAdminResponsable(null);
-              }
+    if (!confirmed) return;
 
-              if (isSuperAdmin() && targetUser.role === 'admin_responsable') {
-                await loadAdminResponsables();
-              }
+    try {
+      setLoading(true);
+      await deleteUserFromFirestore(targetUser.uid);
+      setLoading(false);
 
-              await loadUsers();
+      if (selectedAdminResponsable?.uid === targetUser.uid) {
+        setSelectedAdminResponsable(null);
+      }
 
-              Alert.alert('Usuario eliminado', `${targetUser.email} ha sido eliminado.`);
-            } catch (error) {
-              setLoading(false);
-              Alert.alert('Error', 'No se pudo eliminar el usuario');
-            }
-          },
-        },
-      ]
-    );
+      if (isSuperAdmin() && targetUser.role === 'admin_responsable') {
+        await loadAdminResponsables();
+      }
+
+      await loadUsers();
+
+      if (Platform.OS === 'web') {
+        window.alert(`${targetUser.email} ha sido eliminado.`);
+      } else {
+        Alert.alert('Usuario eliminado', `${targetUser.email} ha sido eliminado.`);
+      }
+    } catch (error: any) {
+      setLoading(false);
+      const errorMsg = error.message || 'No se pudo eliminar el usuario';
+      if (Platform.OS === 'web') {
+        window.alert(`Error: ${errorMsg}`);
+      } else {
+        Alert.alert('Error', errorMsg);
+      }
+    }
   };
 
   // Update user role
