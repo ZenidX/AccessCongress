@@ -1,6 +1,7 @@
 /**
  * Cloud Functions para AccessCongress
- * Sistema de envío de emails con Resend
+ * - Sistema de envío de emails con Resend
+ * - Gestión de usuarios con Admin SDK
  */
 
 import * as admin from 'firebase-admin';
@@ -8,6 +9,9 @@ import * as admin from 'firebase-admin';
 // Inicializar Firebase Admin
 admin.initializeApp();
 
-// Exportar funciones
+// Exportar funciones de email
 export { sendSingleEmail } from './functions/sendSingleEmail';
 export { sendBulkEmail } from './functions/sendBulkEmail';
+
+// Exportar funciones de usuarios
+export { deleteUser } from './functions/deleteUser';

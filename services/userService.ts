@@ -32,7 +32,8 @@ import {
   arrayUnion,
   arrayRemove,
 } from 'firebase/firestore';
-import { auth, db } from '@/config/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { auth, db, functions } from '@/config/firebase';
 import {
   UserRole,
   User,
@@ -385,21 +386,32 @@ export async function getUsersAssignedToEvent(eventId: string): Promise<User[]> 
 }
 
 /**
- * Delete user from Firestore
+ * Delete user completely (Auth + Firestore)
  *
- * NOTE: This only deletes the Firestore document.
- * The user still exists in Firebase Auth because
- * the client SDK cannot delete other users' accounts.
- *
- * For complete deletion, use Firebase Admin SDK via Cloud Functions.
+ * Uses a Cloud Function with Admin SDK to delete the user from:
+ * 1. Firebase Auth (requires Admin SDK)
+ * 2. Firestore users collection
  */
 export async function deleteUserFromFirestore(uid: string): Promise<void> {
   try {
-    const userRef = doc(db, USERS_COLLECTION, uid);
-    await deleteDoc(userRef);
-  } catch (error) {
-    console.error('Error deleting user from Firestore:', error);
-    throw new Error('No se pudo eliminar el usuario de Firestore');
+    const deleteUserFn = httpsCallable<{ targetUid: string }, { success: boolean; message: string }>(
+      functions,
+      'deleteUser'
+    );
+
+    const result = await deleteUserFn({ targetUid: uid });
+
+    if (!result.data.success) {
+      throw new Error(result.data.message || 'Error al eliminar usuario');
+    }
+
+    console.log('Usuario eliminado:', result.data.message);
+  } catch (error: any) {
+    console.error('Error deleting user:', error);
+
+    // Extraer mensaje de error de Cloud Functions
+    const message = error.message || error.details || 'No se pudo eliminar el usuario';
+    throw new Error(message);
   }
 }
 

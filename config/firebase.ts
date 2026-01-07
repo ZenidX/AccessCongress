@@ -6,6 +6,7 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import { getFunctions } from 'firebase/functions';
 
 // TODO: Reemplazar con tu configuración de Firebase
 // Obtén estos valores desde Firebase Console > Project Settings > Web App
@@ -21,9 +22,10 @@ const firebaseConfig = {
 
 // Inicializar Firebase
 const app = initializeApp(firebaseConfig);
+
 // Exportar servicios
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-
+export const functions = getFunctions(app, 'europe-west1');
 
 export default app;
