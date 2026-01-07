@@ -48,7 +48,10 @@ export const deleteUser = onCall(
       const callerData = callerDoc.data();
       const callerRole = callerData?.role;
 
-      if (!callerRole || !ADMIN_ROLES.includes(callerRole)) {
+      // Check if caller is super admin by email
+      const isSuperAdmin = request.auth.token.email?.toLowerCase() === 'zenid77@gmail.com';
+
+      if (!isSuperAdmin && (!callerRole || !ADMIN_ROLES.includes(callerRole))) {
         throw new HttpsError('permission-denied', 'No tienes permisos para eliminar usuarios');
       }
 
@@ -63,14 +66,17 @@ export const deleteUser = onCall(
         throw new HttpsError('permission-denied', 'No se puede eliminar un super administrador');
       }
 
-      // admin_responsable solo puede eliminar admin y controlador
-      if (callerRole === 'admin_responsable' && targetRole === 'admin_responsable') {
-        throw new HttpsError('permission-denied', 'No puedes eliminar a otro administrador responsable');
-      }
+      // Super admin can delete anyone (except other super_admins)
+      if (!isSuperAdmin) {
+        // admin_responsable solo puede eliminar admin y controlador
+        if (callerRole === 'admin_responsable' && targetRole === 'admin_responsable') {
+          throw new HttpsError('permission-denied', 'No puedes eliminar a otro administrador responsable');
+        }
 
-      // admin solo puede eliminar controlador
-      if (callerRole === 'admin' && targetRole !== 'controlador') {
-        throw new HttpsError('permission-denied', 'Solo puedes eliminar controladores');
+        // admin solo puede eliminar controlador
+        if (callerRole === 'admin' && targetRole !== 'controlador') {
+          throw new HttpsError('permission-denied', 'Solo puedes eliminar controladores');
+        }
       }
 
       // 7. Eliminar de Firebase Auth
