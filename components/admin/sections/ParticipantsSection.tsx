@@ -22,6 +22,7 @@ import {
   Platform,
   TextInput,
   Modal,
+  useWindowDimensions,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
@@ -52,6 +53,10 @@ export function ParticipantsSection() {
   const colorScheme = useColorScheme();
   const { currentEvent, setCurrentEvent } = useEvent();
   const { user, isSuperAdmin } = useAuth();
+
+  // Responsive layout
+  const { width } = useWindowDimensions();
+  const isWideScreen = width >= 900;
 
   // State
   const [loading, setLoading] = useState(false);
@@ -493,388 +498,397 @@ export function ParticipantsSection() {
         📊 Gestión de Participantes
       </ThemedText>
 
-      {/* Event selector - grouped by organization */}
-      <View style={styles.eventSelectorSection}>
-        <ThemedText style={styles.fieldLabel}>Seleccionar Evento:</ThemedText>
-        {loadingEvents ? (
-          <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].primary} />
-        ) : events.length === 0 ? (
-          <View style={[
-            styles.warningBanner,
-            { backgroundColor: Colors[colorScheme ?? 'light'].warning + '20' }
-          ]}>
-            <Text style={[styles.warningText, { color: Colors[colorScheme ?? 'light'].warning }]}>
-              ⚠️ No hay eventos disponibles. Crea uno en la sección &quot;Eventos&quot;.
-            </Text>
-          </View>
-        ) : (
-          <ScrollView
-            style={[
-              styles.eventSelectorScrollView,
-              { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }
-            ]}
-            nestedScrollEnabled
-          >
-            {/* Group events by organization */}
-            {Object.keys(orgNames).map((orgId) => {
-              const orgEvents = events.filter(e => e.organizationId === orgId);
-              if (orgEvents.length === 0) return null;
-
-              return (
-                <View key={orgId} style={styles.orgGroup}>
-                  {/* Organization header */}
-                  <View style={[
-                    styles.orgHeader,
-                    { backgroundColor: Colors[colorScheme ?? 'light'].primary + '15' }
-                  ]}>
-                    <Text style={[styles.orgHeaderText, { color: Colors[colorScheme ?? 'light'].primary }]}>
-                      🏢 {orgNames[orgId]}
-                    </Text>
-                  </View>
-
-                  {/* Events of this organization */}
-                  <View style={styles.orgEventsList}>
-                    {orgEvents.map((event) => (
-                      <TouchableOpacity
-                        key={event.id}
-                        style={[
-                          styles.eventSelectorOption,
-                          {
-                            backgroundColor: currentEvent?.id === event.id
-                              ? Colors[colorScheme ?? 'light'].primary
-                              : 'transparent',
-                            borderColor: currentEvent?.id === event.id
-                              ? Colors[colorScheme ?? 'light'].primary
-                              : Colors[colorScheme ?? 'light'].border,
-                          },
-                        ]}
-                        onPress={() => setCurrentEvent(event)}
-                      >
-                        <View style={styles.eventOptionContent}>
-                          <Text
-                            style={[
-                              styles.eventSelectorOptionText,
-                              {
-                                color: currentEvent?.id === event.id
-                                  ? '#fff'
-                                  : Colors[colorScheme ?? 'light'].text,
-                              },
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {event.name}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.eventDateText,
-                              {
-                                color: currentEvent?.id === event.id
-                                  ? 'rgba(255,255,255,0.8)'
-                                  : Colors[colorScheme ?? 'light'].textSecondary,
-                              },
-                            ]}
-                          >
-                            {new Date(event.date).toLocaleDateString('es-ES', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                            })}
-                          </Text>
-                        </View>
-                        {currentEvent?.id === event.id && (
-                          <Text style={styles.selectedIcon}>✓</Text>
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              );
-            })}
-          </ScrollView>
-        )}
-      </View>
-
-      {/* Import mode selector */}
-      <View style={styles.importModeSection}>
-        <ThemedText style={styles.fieldLabel}>Modo de importación:</ThemedText>
-        <View style={styles.modeSelector}>
-          <TouchableOpacity
-            style={[
-              styles.modeOption,
-              importMode === 'merge' && { backgroundColor: Colors.light.success },
-            ]}
-            onPress={() => setImportMode('merge')}
-          >
-            <Text style={[styles.modeOptionText, importMode === 'merge' && { color: '#fff' }]}>
-              Añadir
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.modeOption,
-              importMode === 'replace' && { backgroundColor: Colors.light.error },
-            ]}
-            onPress={() => setImportMode('replace')}
-          >
-            <Text style={[styles.modeOptionText, importMode === 'replace' && { color: '#fff' }]}>
-              Total (Reemplazar)
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <ThemedText style={styles.modeDescription}>
-          {importMode === 'merge'
-            ? 'Añade nuevos participantes sin borrar los existentes'
-            : 'Elimina todos los participantes existentes y carga los nuevos'}
-        </ThemedText>
-      </View>
-
-      {/* Action buttons */}
-      <TouchableOpacity
-        style={[
-          styles.actionCard,
-          Shadows.light,
-          {
-            backgroundColor: Colors[colorScheme ?? 'light'].cardBackground,
-            opacity: currentEvent ? 1 : 0.5,
-          },
-        ]}
-        onPress={handleImportCSV}
-        disabled={loading || !currentEvent}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.actionIcon}>📁</Text>
-        <View style={styles.actionTextContainer}>
-          <ThemedText style={styles.actionTitle}>
-            Importar participantes desde CSV/Excel
-          </ThemedText>
-          <ThemedText style={styles.actionDescription}>
-            Cargar desde archivo .csv, .xlsx o .xls
-          </ThemedText>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[
-          styles.actionCard,
-          Shadows.light,
-          {
-            backgroundColor: Colors[colorScheme ?? 'light'].cardBackground,
-            opacity: currentEvent ? 1 : 0.5,
-          },
-        ]}
-        onPress={handleExportData}
-        disabled={loading || !currentEvent}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.actionIcon}>📥</Text>
-        <View style={styles.actionTextContainer}>
-          <ThemedText style={styles.actionTitle}>
-            Exportar datos a Excel
-          </ThemedText>
-          <ThemedText style={styles.actionDescription}>
-            Descargar participantes y logs del evento actual
-          </ThemedText>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[
-          styles.actionCard,
-          Shadows.light,
-          { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground },
-        ]}
-        onPress={() => setShowAddParticipantModal(true)}
-        disabled={loading || !currentEvent}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.actionIcon}>➕</Text>
-        <View style={styles.actionTextContainer}>
-          <ThemedText style={styles.actionTitle}>
-            Añadir participante individual
-          </ThemedText>
-          <ThemedText style={styles.actionDescription}>
-            Registrar un participante manualmente
-          </ThemedText>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[
-          styles.infoButton,
-          Shadows.medium,
-          { backgroundColor: Colors[colorScheme ?? 'light'].primary },
-        ]}
-        onPress={showCSVFormatInfo}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.infoButtonText}>ℹ️ Ver formatos aceptados</Text>
-      </TouchableOpacity>
-
-      {/* Participants table */}
-      <View style={[styles.subsection, { marginTop: Spacing.xl }]}>
-        <View style={styles.subsectionHeader}>
-          <ThemedText style={styles.sectionTitle}>
-            👥 Lista de Participantes ({participants.length})
-          </ThemedText>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
-            {/* Send email to all button */}
-            {currentEvent && participants.filter((p) => p.email).length > 0 && (
-              <TouchableOpacity
-                onPress={handleSendEmailToAll}
-                disabled={loading || sendingEmail}
+      {/* Responsive layout container */}
+      <View style={isWideScreen ? styles.twoColumnLayout : styles.singleColumnLayout}>
+        {/* Left column: Controls */}
+        <View style={isWideScreen ? styles.leftColumn : styles.fullWidth}>
+          {/* Event selector - grouped by organization */}
+          <View style={styles.eventSelectorSection}>
+            <ThemedText style={styles.fieldLabel}>Seleccionar Evento:</ThemedText>
+            {loadingEvents ? (
+              <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].primary} />
+            ) : events.length === 0 ? (
+              <View style={[
+                styles.warningBanner,
+                { backgroundColor: Colors[colorScheme ?? 'light'].warning + '20' }
+              ]}>
+                <Text style={[styles.warningText, { color: Colors[colorScheme ?? 'light'].warning }]}>
+                  ⚠️ No hay eventos disponibles. Crea uno en la sección &quot;Eventos&quot;.
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
                 style={[
-                  styles.emailAllButton,
-                  { backgroundColor: Colors[colorScheme ?? 'light'].primary },
+                  styles.eventSelectorScrollView,
+                  { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }
                 ]}
+                nestedScrollEnabled
               >
-                <Text style={styles.emailAllButtonText}>
-                  📧 Enviar a todos ({participants.filter((p) => p.email).length})
+                {/* Group events by organization */}
+                {Object.keys(orgNames).map((orgId) => {
+                  const orgEvents = events.filter(e => e.organizationId === orgId);
+                  if (orgEvents.length === 0) return null;
+
+                  return (
+                    <View key={orgId} style={styles.orgGroup}>
+                      {/* Organization header */}
+                      <View style={[
+                        styles.orgHeader,
+                        { backgroundColor: Colors[colorScheme ?? 'light'].primary + '15' }
+                      ]}>
+                        <Text style={[styles.orgHeaderText, { color: Colors[colorScheme ?? 'light'].primary }]}>
+                          🏢 {orgNames[orgId]}
+                        </Text>
+                      </View>
+
+                      {/* Events of this organization */}
+                      <View style={styles.orgEventsList}>
+                        {orgEvents.map((event) => (
+                          <TouchableOpacity
+                            key={event.id}
+                            style={[
+                              styles.eventSelectorOption,
+                              {
+                                backgroundColor: currentEvent?.id === event.id
+                                  ? Colors[colorScheme ?? 'light'].primary
+                                  : 'transparent',
+                                borderColor: currentEvent?.id === event.id
+                                  ? Colors[colorScheme ?? 'light'].primary
+                                  : Colors[colorScheme ?? 'light'].border,
+                              },
+                            ]}
+                            onPress={() => setCurrentEvent(event)}
+                          >
+                            <View style={styles.eventOptionContent}>
+                              <Text
+                                style={[
+                                  styles.eventSelectorOptionText,
+                                  {
+                                    color: currentEvent?.id === event.id
+                                      ? '#fff'
+                                      : Colors[colorScheme ?? 'light'].text,
+                                  },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {event.name}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.eventDateText,
+                                  {
+                                    color: currentEvent?.id === event.id
+                                      ? 'rgba(255,255,255,0.8)'
+                                      : Colors[colorScheme ?? 'light'].textSecondary,
+                                  },
+                                ]}
+                              >
+                                {new Date(event.date).toLocaleDateString('es-ES', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                })}
+                              </Text>
+                            </View>
+                            {currentEvent?.id === event.id && (
+                              <Text style={styles.selectedIcon}>✓</Text>
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+
+          {/* Import mode selector */}
+          <View style={styles.importModeSection}>
+            <ThemedText style={styles.fieldLabel}>Modo de importación:</ThemedText>
+            <View style={styles.modeSelector}>
+              <TouchableOpacity
+                style={[
+                  styles.modeOption,
+                  importMode === 'merge' && { backgroundColor: Colors.light.success },
+                ]}
+                onPress={() => setImportMode('merge')}
+              >
+                <Text style={[styles.modeOptionText, importMode === 'merge' && { color: '#fff' }]}>
+                  Añadir
                 </Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modeOption,
+                  importMode === 'replace' && { backgroundColor: Colors.light.error },
+                ]}
+                onPress={() => setImportMode('replace')}
+              >
+                <Text style={[styles.modeOptionText, importMode === 'replace' && { color: '#fff' }]}>
+                  Total (Reemplazar)
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <ThemedText style={styles.modeDescription}>
+              {importMode === 'merge'
+                ? 'Añade nuevos participantes sin borrar los existentes'
+                : 'Elimina todos los participantes existentes y carga los nuevos'}
+            </ThemedText>
+          </View>
+
+          {/* Action buttons */}
+          <TouchableOpacity
+            style={[
+              styles.actionCard,
+              Shadows.light,
+              {
+                backgroundColor: Colors[colorScheme ?? 'light'].cardBackground,
+                opacity: currentEvent ? 1 : 0.5,
+              },
+            ]}
+            onPress={handleImportCSV}
+            disabled={loading || !currentEvent}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.actionIcon}>📁</Text>
+            <View style={styles.actionTextContainer}>
+              <ThemedText style={styles.actionTitle}>
+                Importar participantes desde CSV/Excel
+              </ThemedText>
+              <ThemedText style={styles.actionDescription}>
+                Cargar desde archivo .csv, .xlsx o .xls
+              </ThemedText>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.actionCard,
+              Shadows.light,
+              {
+                backgroundColor: Colors[colorScheme ?? 'light'].cardBackground,
+                opacity: currentEvent ? 1 : 0.5,
+              },
+            ]}
+            onPress={handleExportData}
+            disabled={loading || !currentEvent}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.actionIcon}>📥</Text>
+            <View style={styles.actionTextContainer}>
+              <ThemedText style={styles.actionTitle}>
+                Exportar datos a Excel
+              </ThemedText>
+              <ThemedText style={styles.actionDescription}>
+                Descargar participantes y logs del evento actual
+              </ThemedText>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.actionCard,
+              Shadows.light,
+              { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground },
+            ]}
+            onPress={() => setShowAddParticipantModal(true)}
+            disabled={loading || !currentEvent}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.actionIcon}>➕</Text>
+            <View style={styles.actionTextContainer}>
+              <ThemedText style={styles.actionTitle}>
+                Añadir participante individual
+              </ThemedText>
+              <ThemedText style={styles.actionDescription}>
+                Registrar un participante manualmente
+              </ThemedText>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.infoButton,
+              Shadows.medium,
+              { backgroundColor: Colors[colorScheme ?? 'light'].primary },
+            ]}
+            onPress={showCSVFormatInfo}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.infoButtonText}>ℹ️ Ver formatos aceptados</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Right column: Participants list */}
+        <View style={isWideScreen ? styles.rightColumn : styles.fullWidth}>
+          {/* Participants table */}
+          <View style={[styles.subsection, isWideScreen ? { marginTop: 0 } : { marginTop: Spacing.xl }]}>
+            <View style={styles.subsectionHeader}>
+              <ThemedText style={styles.sectionTitle}>
+                👥 Lista de Participantes ({participants.length})
+              </ThemedText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+                {/* Send email to all button */}
+                {currentEvent && participants.filter((p) => p.email).length > 0 && (
+                  <TouchableOpacity
+                    onPress={handleSendEmailToAll}
+                    disabled={loading || sendingEmail}
+                    style={[
+                      styles.emailAllButton,
+                      { backgroundColor: Colors[colorScheme ?? 'light'].primary },
+                    ]}
+                  >
+                    <Text style={styles.emailAllButtonText}>
+                      📧 Enviar a todos ({participants.filter((p) => p.email).length})
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  onPress={loadParticipants}
+                  disabled={loadingParticipants}
+                  style={{ padding: Spacing.xs }}
+                >
+                  <Text style={{ fontSize: 20 }}>{loadingParticipants ? '⏳' : '🔄'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {loadingParticipants ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={Colors.light.primary} />
+                <ThemedText style={{ marginTop: Spacing.md }}>Cargando participantes...</ThemedText>
+              </View>
+            ) : !currentEvent ? (
+              <View style={[styles.infoCard, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
+                <ThemedText style={styles.infoText}>
+                  Selecciona un evento para ver sus participantes.
+                </ThemedText>
+              </View>
+            ) : participants.length === 0 ? (
+              <View style={[styles.infoCard, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
+                <ThemedText style={styles.infoText}>
+                  No hay participantes registrados. Importa o añade participantes para comenzar.
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={styles.table}>
+                {/* Table header */}
+                <View style={[styles.tableRow, styles.tableHeader]}>
+                  <Text style={[styles.tableCell, styles.tableHeaderCell, styles.colDNI]}>DNI</Text>
+                  <Text style={[styles.tableCell, styles.tableHeaderCell, styles.colNombre]}>Nombre</Text>
+                  <Text style={[styles.tableCell, styles.tableHeaderCell, styles.colPermisos, { textAlign: 'center' }]}>Permisos</Text>
+                  <Text style={[styles.tableCell, styles.tableHeaderCell, styles.colAcciones]}>Acciones</Text>
+                </View>
+
+                {/* Table rows */}
+                <ScrollView style={isWideScreen ? { maxHeight: 800 } : { maxHeight: 600 }}>
+                  {participants.map((participant, index) => (
+                    <View
+                      key={participant.dni}
+                      style={[
+                        styles.tableRow,
+                        {
+                          backgroundColor: index % 2 === 0
+                            ? (colorScheme === 'dark' ? Colors.dark.cardBackground : '#fff')
+                            : (colorScheme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)')
+                        }
+                      ]}
+                    >
+                      <View style={[styles.tableCell, styles.colDNI]}>
+                        <ThemedText style={{ fontSize: FontSizes.xs, fontWeight: '600' }}>{participant.dni}</ThemedText>
+                      </View>
+                      <View style={[styles.tableCell, styles.colNombre]}>
+                        <ThemedText style={{ fontSize: FontSizes.sm, fontWeight: 'bold' }}>{participant.nombre}</ThemedText>
+                        {participant.email && (
+                          <ThemedText style={{ fontSize: FontSizes.xs, opacity: 0.7 }}>📧 {participant.email}</ThemedText>
+                        )}
+                        {participant.cargo && (
+                          <ThemedText style={{ fontSize: FontSizes.xs, opacity: 0.7 }}>💼 {participant.cargo}</ThemedText>
+                        )}
+                      </View>
+                      <View style={[styles.tableCell, styles.colPermisos]}>
+                        <View style={styles.permisosContainer}>
+                          {participant.haPagado && (
+                            <View style={[styles.permisoBadge, { backgroundColor: Colors.light.success }]}>
+                              <Text style={styles.permisoBadgeText}>Pagado</Text>
+                            </View>
+                          )}
+                          {participant.permisos.aula_magna && (
+                            <View style={[styles.permisoBadge, { backgroundColor: Colors.light.modeCena }]}>
+                              <Text style={styles.permisoBadgeText}>Aula Magna</Text>
+                            </View>
+                          )}
+                          {participant.permisos.master_class && (
+                            <View style={[styles.permisoBadge, { backgroundColor: Colors.light.modeAulaMagna }]}>
+                              <Text style={styles.permisoBadgeText}>Master Class</Text>
+                            </View>
+                          )}
+                          {participant.permisos.cena && (
+                            <View style={[styles.permisoBadge, { backgroundColor: Colors.light.modeMasterClass }]}>
+                              <Text style={styles.permisoBadgeText}>Cena</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                      <View style={[styles.tableCell, styles.colAcciones]}>
+                        <View style={styles.actionButtonsRow}>
+                          {/* Email button - only show if participant has email */}
+                          {participant.email && (
+                            <TouchableOpacity
+                              onPress={() => handleSendEmailToParticipant(participant)}
+                              style={[styles.emailButton, { backgroundColor: Colors.light.primary }]}
+                              disabled={loading || sendingEmail}
+                            >
+                              <Text style={styles.emailButtonText}>📧</Text>
+                            </TouchableOpacity>
+                          )}
+                          {/* Delete button */}
+                          <TouchableOpacity
+                            onPress={() => handleDeleteParticipant(participant.dni, participant.nombre)}
+                            style={[styles.deleteButton, { backgroundColor: Colors.light.error }]}
+                            disabled={loading}
+                          >
+                            <Text style={styles.deleteButtonText}>🗑️</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
             )}
+          </View>
+
+          {/* Tools section */}
+          <View style={[styles.subsection, { marginTop: Spacing.xl }]}>
+            <ThemedText style={styles.sectionTitle}>⚙️ Herramientas</ThemedText>
+
             <TouchableOpacity
-              onPress={loadParticipants}
-              disabled={loadingParticipants}
-              style={{ padding: Spacing.xs }}
+              style={[
+                styles.actionCard,
+                Shadows.light,
+                {
+                  backgroundColor: Colors[colorScheme ?? 'light'].cardBackground,
+                  opacity: currentEvent ? 1 : 0.5,
+                },
+              ]}
+              onPress={handleResetStates}
+              disabled={loading || !currentEvent}
+              activeOpacity={0.7}
             >
-              <Text style={{ fontSize: 20 }}>{loadingParticipants ? '⏳' : '🔄'}</Text>
+              <Text style={styles.actionIcon}>🔄</Text>
+              <View style={styles.actionTextContainer}>
+                <ThemedText style={styles.actionTitle}>
+                  Resetear todos los estados
+                </ThemedText>
+                <ThemedText style={styles.actionDescription}>
+                  Marcar todos como no registrados y fuera de ubicaciones
+                </ThemedText>
+              </View>
             </TouchableOpacity>
           </View>
         </View>
-
-        {loadingParticipants ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={Colors.light.primary} />
-            <ThemedText style={{ marginTop: Spacing.md }}>Cargando participantes...</ThemedText>
-          </View>
-        ) : !currentEvent ? (
-          <View style={[styles.infoCard, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
-            <ThemedText style={styles.infoText}>
-              Selecciona un evento para ver sus participantes.
-            </ThemedText>
-          </View>
-        ) : participants.length === 0 ? (
-          <View style={[styles.infoCard, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
-            <ThemedText style={styles.infoText}>
-              No hay participantes registrados. Importa o añade participantes para comenzar.
-            </ThemedText>
-          </View>
-        ) : (
-          <View style={styles.table}>
-            {/* Table header */}
-            <View style={[styles.tableRow, styles.tableHeader]}>
-              <Text style={[styles.tableCell, styles.tableHeaderCell, styles.colDNI]}>DNI</Text>
-              <Text style={[styles.tableCell, styles.tableHeaderCell, styles.colNombre]}>Nombre</Text>
-              <Text style={[styles.tableCell, styles.tableHeaderCell, styles.colPermisos, { textAlign: 'center' }]}>Permisos</Text>
-              <Text style={[styles.tableCell, styles.tableHeaderCell, styles.colAcciones]}>Acciones</Text>
-            </View>
-
-            {/* Table rows */}
-            <ScrollView style={{ maxHeight: 600 }}>
-              {participants.map((participant, index) => (
-                <View
-                  key={participant.dni}
-                  style={[
-                    styles.tableRow,
-                    {
-                      backgroundColor: index % 2 === 0
-                        ? (colorScheme === 'dark' ? Colors.dark.cardBackground : '#fff')
-                        : (colorScheme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)')
-                    }
-                  ]}
-                >
-                  <View style={[styles.tableCell, styles.colDNI]}>
-                    <ThemedText style={{ fontSize: FontSizes.xs, fontWeight: '600' }}>{participant.dni}</ThemedText>
-                  </View>
-                  <View style={[styles.tableCell, styles.colNombre]}>
-                    <ThemedText style={{ fontSize: FontSizes.sm, fontWeight: 'bold' }}>{participant.nombre}</ThemedText>
-                    {participant.email && (
-                      <ThemedText style={{ fontSize: FontSizes.xs, opacity: 0.7 }}>📧 {participant.email}</ThemedText>
-                    )}
-                    {participant.cargo && (
-                      <ThemedText style={{ fontSize: FontSizes.xs, opacity: 0.7 }}>💼 {participant.cargo}</ThemedText>
-                    )}
-                  </View>
-                  <View style={[styles.tableCell, styles.colPermisos]}>
-                    <View style={styles.permisosContainer}>
-                      {participant.haPagado && (
-                        <View style={[styles.permisoBadge, { backgroundColor: Colors.light.success }]}>
-                          <Text style={styles.permisoBadgeText}>Pagado</Text>
-                        </View>
-                      )}
-                      {participant.permisos.aula_magna && (
-                        <View style={[styles.permisoBadge, { backgroundColor: Colors.light.modeCena }]}>
-                          <Text style={styles.permisoBadgeText}>Aula Magna</Text>
-                        </View>
-                      )}
-                      {participant.permisos.master_class && (
-                        <View style={[styles.permisoBadge, { backgroundColor: Colors.light.modeAulaMagna }]}>
-                          <Text style={styles.permisoBadgeText}>Master Class</Text>
-                        </View>
-                      )}
-                      {participant.permisos.cena && (
-                        <View style={[styles.permisoBadge, { backgroundColor: Colors.light.modeMasterClass }]}>
-                          <Text style={styles.permisoBadgeText}>Cena</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                  <View style={[styles.tableCell, styles.colAcciones]}>
-                    <View style={styles.actionButtonsRow}>
-                      {/* Email button - only show if participant has email */}
-                      {participant.email && (
-                        <TouchableOpacity
-                          onPress={() => handleSendEmailToParticipant(participant)}
-                          style={[styles.emailButton, { backgroundColor: Colors.light.primary }]}
-                          disabled={loading || sendingEmail}
-                        >
-                          <Text style={styles.emailButtonText}>📧</Text>
-                        </TouchableOpacity>
-                      )}
-                      {/* Delete button */}
-                      <TouchableOpacity
-                        onPress={() => handleDeleteParticipant(participant.dni, participant.nombre)}
-                        style={[styles.deleteButton, { backgroundColor: Colors.light.error }]}
-                        disabled={loading}
-                      >
-                        <Text style={styles.deleteButtonText}>🗑️</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-      </View>
-
-      {/* Tools section */}
-      <View style={[styles.subsection, { marginTop: Spacing.xl }]}>
-        <ThemedText style={styles.sectionTitle}>⚙️ Herramientas</ThemedText>
-
-        <TouchableOpacity
-          style={[
-            styles.actionCard,
-            Shadows.light,
-            {
-              backgroundColor: Colors[colorScheme ?? 'light'].cardBackground,
-              opacity: currentEvent ? 1 : 0.5,
-            },
-          ]}
-          onPress={handleResetStates}
-          disabled={loading || !currentEvent}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.actionIcon}>🔄</Text>
-          <View style={styles.actionTextContainer}>
-            <ThemedText style={styles.actionTitle}>
-              Resetear todos los estados
-            </ThemedText>
-            <ThemedText style={styles.actionDescription}>
-              Marcar todos como no registrados y fuera de ubicaciones
-            </ThemedText>
-          </View>
-        </TouchableOpacity>
       </View>
 
       {/* Loading overlay */}
@@ -1041,6 +1055,25 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.lg,
     fontWeight: 'bold',
     marginBottom: Spacing.md,
+  },
+  // Responsive layout styles
+  twoColumnLayout: {
+    flexDirection: 'row',
+    gap: Spacing.xl,
+  },
+  singleColumnLayout: {
+    flexDirection: 'column',
+  },
+  leftColumn: {
+    width: 350,
+    flexShrink: 0,
+  },
+  rightColumn: {
+    flex: 1,
+    minWidth: 400,
+  },
+  fullWidth: {
+    width: '100%',
   },
   subsection: {
     marginTop: Spacing.lg,
