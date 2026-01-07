@@ -1065,11 +1065,11 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
   },
   leftColumn: {
-    width: 420,
-    flexShrink: 0,
+    flex: 2,
+    minWidth: 300,
   },
   rightColumn: {
-    flex: 1,
+    flex: 3,
     minWidth: 400,
   },
   fullWidth: {
