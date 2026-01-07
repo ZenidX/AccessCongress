@@ -170,7 +170,12 @@ service cloud.firestore {
       // Super admin can create any user
       // Admin responsable can create admins and controllers in their org
       // Admins can create controllers in their org
+      // NEW: Allow user to create their own document (needed because createUserWithEmailAndPassword
+      //      switches the session to the new user before we can write to Firestore)
       allow create: if isSuperAdmin() ||
+                      // User can create their own document (but not as super_admin)
+                      (request.auth.uid == userId &&
+                       request.resource.data.role != 'super_admin') ||
                       (hasRole('admin_responsable') &&
                        request.resource.data.role in ['admin', 'controlador'] &&
                        request.resource.data.organizationId == getUserData().organizationId) ||

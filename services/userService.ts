@@ -13,11 +13,7 @@
  * For production, consider using Firebase Admin SDK via Cloud Functions.
  */
 
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut,
-} from 'firebase/auth';
+// Note: Firebase Auth imports removed - user creation now uses Cloud Functions
 import {
   collection,
   doc,
@@ -159,14 +155,17 @@ export async function getControllersByOrganization(orgId: string): Promise<User[
 /**
  * Create a new user in Firebase Auth and Firestore
  *
+ * Uses a Cloud Function with Admin SDK to create users without
+ * changing the current session (unlike createUserWithEmailAndPassword).
+ *
  * @param email - Email for the new user
  * @param password - Password for the new user
  * @param username - Display name
  * @param role - User role
  * @param organizationId - Organization ID (null for super_admin)
- * @param adminEmail - Admin email for re-authentication
- * @param adminPassword - Admin password for re-authentication
- * @param createdByUid - UID of the user creating this user
+ * @param _adminEmail - (deprecated, not needed with Cloud Function)
+ * @param _adminPassword - (deprecated, not needed with Cloud Function)
+ * @param _createdByUid - (deprecated, Cloud Function uses caller's UID)
  * @returns UID of the created user
  */
 export async function createUser(
@@ -175,9 +174,9 @@ export async function createUser(
   username: string,
   role: UserRole,
   organizationId: string | null,
-  adminEmail: string,
-  adminPassword: string,
-  createdByUid?: string
+  _adminEmail?: string,
+  _adminPassword?: string,
+  _createdByUid?: string
 ): Promise<string> {
   try {
     // Prevent creating super_admin
@@ -185,45 +184,32 @@ export async function createUser(
       throw new Error('No se puede crear un super administrador');
     }
 
-    // 1. Create user in Firebase Auth (this changes active session)
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const newUserUid = userCredential.user.uid;
+    const createUserFn = httpsCallable<
+      { email: string; password: string; username: string; role: UserRole; organizationId: string | null },
+      { success: boolean; message: string; uid: string }
+    >(functions, 'createUser');
 
-    // 2. Create document in Firestore
-    const now = Date.now();
-    await setDoc(doc(db, USERS_COLLECTION, newUserUid), {
-      uid: newUserUid,
+    const result = await createUserFn({
       email,
+      password,
       username,
       role,
       organizationId,
-      assignedEventIds: [],
-      createdAt: now,
-      createdBy: createdByUid || null,
-      updatedAt: now,
     });
 
-    // 3. Sign out the new user
-    await signOut(auth);
+    if (!result.data.success) {
+      throw new Error(result.data.message || 'Error al crear usuario');
+    }
 
-    // 4. Re-authenticate the admin
-    await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+    console.log('Usuario creado:', result.data.message);
+    return result.data.uid;
 
-    return newUserUid;
   } catch (error: any) {
     console.error('Error creating user:', error);
 
-    if (error.code === 'auth/email-already-in-use') {
-      throw new Error('El email ya está en uso');
-    }
-    if (error.code === 'auth/weak-password') {
-      throw new Error('La contraseña debe tener al menos 6 caracteres');
-    }
-    if (error.code === 'auth/invalid-email') {
-      throw new Error('El email no es válido');
-    }
-
-    throw new Error(`Error al crear usuario: ${error.message}`);
+    // Extract error message from Cloud Functions error
+    const message = error.message || error.details || 'No se pudo crear el usuario';
+    throw new Error(message);
   }
 }
 
