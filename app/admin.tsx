@@ -18,10 +18,12 @@ import {
   ActivityIndicator,
   Image,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 import { ThemedView } from '@/components/themed/themed-view';
 import { Colors, BorderRadius, Spacing, Shadows, FontSizes } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { LoginButton } from '@/components/forms/LoginButton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEvent } from '@/contexts/EventContext';
@@ -42,12 +44,16 @@ import { Event, ResetType } from '@/types/event';
 
 export default function AdminScreen() {
   const colorScheme = useColorScheme();
+  const { isMobile } = useResponsiveLayout();
   const { user } = useAuth();
   const { currentEvent, setCurrentEvent, refreshEvents } = useEvent();
 
   // Estado del sidebar y sección seleccionada
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedSection, setSelectedSection] = useState<AdminSection>('events');
+
+  // Mobile drawer state
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   // Estado para gestión de eventos
   const [showEventForm, setShowEventForm] = useState(false);
@@ -183,22 +189,49 @@ export default function AdminScreen() {
     <ThemedView style={styles.container}>
       {/* Layout horizontal: Sidebar + Contenido */}
       <View style={styles.mainLayout}>
-        {/* Sidebar colapsable */}
-        <AdminSidebar
-          isCollapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-          selectedSection={selectedSection}
-          onSelectSection={setSelectedSection}
-        />
+        {/* Sidebar colapsable - inline en desktop, drawer en mobile */}
+        {!isMobile && (
+          <AdminSidebar
+            isCollapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            selectedSection={selectedSection}
+            onSelectSection={setSelectedSection}
+          />
+        )}
+
+        {/* Mobile drawer */}
+        {isMobile && (
+          <AdminSidebar
+            isCollapsed={false}
+            onToggleCollapse={() => {}}
+            selectedSection={selectedSection}
+            onSelectSection={setSelectedSection}
+            isMobile={true}
+            isDrawerOpen={mobileDrawerOpen}
+            onCloseDrawer={() => setMobileDrawerOpen(false)}
+          />
+        )}
 
         {/* Contenido principal */}
         <View style={styles.mainContent}>
           {/* Header con logo y login */}
           <View style={styles.headerContainer}>
-            <View style={styles.logoContainer}>
+            {/* Mobile hamburger button */}
+            {isMobile && (
+              <TouchableOpacity
+                style={[
+                  styles.hamburgerButton,
+                  { backgroundColor: Colors[colorScheme ?? 'light'].primary },
+                ]}
+                onPress={() => setMobileDrawerOpen(true)}
+              >
+                <Text style={styles.hamburgerIcon}>☰</Text>
+              </TouchableOpacity>
+            )}
+            <View style={[styles.logoContainer, isMobile && { flex: 1 }]}>
               <Image
                 source={{ uri: 'https://impulseducacio.org/wp-content/uploads/2020/02/logo-web-impuls.png' }}
-                style={styles.logo}
+                style={isMobile ? styles.logoSmall : styles.logo}
                 resizeMode="contain"
               />
             </View>
@@ -250,8 +283,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: Colors.light.primary,
   },
   logoContainer: {
     flex: 1,
@@ -261,8 +293,24 @@ const styles = StyleSheet.create({
     width: 150,
     height: 50,
   },
+  logoSmall: {
+    width: 120,
+    height: 40,
+  },
   loginContainer: {
     flexShrink: 0,
+  },
+  hamburgerButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.sm,
+  },
+  hamburgerIcon: {
+    fontSize: 22,
+    color: '#fff',
   },
   content: {
     padding: Spacing.lg,

@@ -673,9 +673,13 @@ export default function DashboardScreen() {
                   </View>
 
                   <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
-                    <Text style={styles.indicatorNumber}>{stats.maxSimultaneous}</Text>
+                    <Text style={styles.indicatorNumber}>
+                      {selectedMode === 'registro'
+                        ? `${potentialCounts[selectedMode] > 0 ? Math.round((participants.length / potentialCounts[selectedMode]) * 100) : 0}%`
+                        : stats.maxSimultaneous}
+                    </Text>
                     <Text style={styles.indicatorLabel}>
-                      {selectedMode === 'registro' ? 'Total' : 'Máximo'}
+                      {selectedMode === 'registro' ? '% Asistencia' : 'Máximo'}
                     </Text>
                   </View>
 
@@ -931,9 +935,13 @@ export default function DashboardScreen() {
                 </View>
 
                 <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
-                  <Text style={styles.indicatorNumber}>{stats.maxSimultaneous}</Text>
+                  <Text style={styles.indicatorNumber}>
+                    {selectedMode === 'registro'
+                      ? `${potentialCounts[selectedMode] > 0 ? Math.round((participants.length / potentialCounts[selectedMode]) * 100) : 0}%`
+                      : stats.maxSimultaneous}
+                  </Text>
                   <Text style={styles.indicatorLabel}>
-                    {selectedMode === 'registro' ? 'Total' : 'Máximo'}
+                    {selectedMode === 'registro' ? '% Asistencia' : 'Máximo'}
                   </Text>
                 </View>
 
@@ -1065,6 +1073,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.sm,
+    backgroundColor: Colors.light.primary,
   },
   logoContainer: {
     flex: 1,

@@ -20,11 +20,13 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { Colors, BorderRadius, Spacing, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { RoleBadge } from '../data-display/RoleBadge';
 
 export function LoginButton() {
   const { user, login, logout } = useAuth();
   const colorScheme = useColorScheme();
+  const { isMobile } = useResponsiveLayout();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [email, setEmail] = useState('');
@@ -89,18 +91,17 @@ export function LoginButton() {
         <TouchableOpacity
           style={[
             styles.userDisplayButton,
-            colorScheme === 'dark' ? Shadows.light : Shadows.medium,
-            {
-              backgroundColor:
-                colorScheme === 'dark'
-                  ? Colors.dark.cardBackground
-                  : Colors.light.cardBackground,
-            },
+            isMobile && styles.userDisplayButtonMobile,
           ]}
           onPress={() => setShowUserMenu(!showUserMenu)}
         >
-          <Text style={styles.usernameDisplay}>{user.username}</Text>
-          <RoleBadge role={user.role} />
+          <Text
+            style={[styles.usernameDisplay, isMobile && styles.usernameDisplayMobile]}
+            numberOfLines={isMobile ? 2 : 1}
+          >
+            {user.username}
+          </Text>
+          <RoleBadge role={user.role} size={isMobile ? 'small' : 'medium'} />
         </TouchableOpacity>
 
         {/* Modal para el menú de usuario - siempre por encima de todo */}
@@ -154,6 +155,7 @@ export function LoginButton() {
       <TouchableOpacity
         style={[
           styles.loginButton,
+          isMobile && styles.loginButtonMobile,
           {
             backgroundColor:
               colorScheme === 'dark' ? Colors.dark.primary : Colors.light.primary,
@@ -162,7 +164,9 @@ export function LoginButton() {
         ]}
         onPress={() => setShowLoginModal(true)}
       >
-        <Text style={styles.loginButtonText}>👤 Iniciar sesión</Text>
+        <Text style={[styles.loginButtonText, isMobile && styles.loginButtonTextMobile]}>
+          {isMobile ? '👤' : '👤 Iniciar sesión'}
+        </Text>
       </TouchableOpacity>
       {/* Modal de login */}
       <Modal
@@ -282,10 +286,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.full,
   },
+  loginButtonMobile: {
+    paddingHorizontal: Spacing.sm,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   loginButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  loginButtonTextMobile: {
+    fontSize: 20,
   },
   userDisplayButton: {
     flexDirection: 'row',
@@ -295,10 +309,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.full,
   },
+  userDisplayButtonMobile: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 4,
+    maxWidth: 120,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+  },
   usernameDisplay: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: Colors.light.text,
+    color: '#fff',
+  },
+  usernameDisplayMobile: {
+    fontSize: 12,
+    textAlign: 'right',
   },
   roleBadgeDisplay: {
     paddingHorizontal: Spacing.xs,
