@@ -100,7 +100,19 @@ export const createUser = onCall(
 
       console.log(`✅ Usuario ${email} creado en Auth con UID: ${userRecord.uid}`);
 
-      // 8. Crear documento en Firestore
+      // 8. Si es controlador, obtener todos los eventos de la organización
+      let assignedEventIds: string[] = [];
+      if (role === 'controlador' && organizationId) {
+        const eventsSnapshot = await db
+          .collection('events')
+          .where('organizationId', '==', organizationId)
+          .get();
+
+        assignedEventIds = eventsSnapshot.docs.map((doc) => doc.id);
+        console.log(`📋 Asignando ${assignedEventIds.length} eventos al controlador`);
+      }
+
+      // 9. Crear documento en Firestore
       const now = Date.now();
       const userData = {
         uid: userRecord.uid,
@@ -108,7 +120,7 @@ export const createUser = onCall(
         username,
         role,
         organizationId,
-        assignedEventIds: [],
+        assignedEventIds,
         createdAt: now,
         createdBy: callerUid,
         updatedAt: now,
@@ -117,7 +129,7 @@ export const createUser = onCall(
       await db.collection(USERS_COLLECTION).doc(userRecord.uid).set(userData);
       console.log(`✅ Documento de usuario creado en Firestore`);
 
-      // 9. Si es admin_responsable, actualizar su organizationId a su propio UID
+      // 10. Si es admin_responsable, actualizar su organizationId a su propio UID
       let finalOrgId = organizationId;
       if (role === 'admin_responsable') {
         finalOrgId = userRecord.uid;
@@ -128,12 +140,12 @@ export const createUser = onCall(
         console.log(`✅ OrganizationId actualizado para admin_responsable`);
       }
 
-      // 10. Establecer Custom Claims inmediatamente
+      // 11. Establecer Custom Claims inmediatamente
       // Esto asegura que los claims estén disponibles antes de que el trigger de Firestore se ejecute
       await admin.auth().setCustomUserClaims(userRecord.uid, {
         role: role,
         orgId: finalOrgId,
-        events: [],
+        events: assignedEventIds,
       });
       console.log(`✅ Custom Claims establecidos para el nuevo usuario`);
 
