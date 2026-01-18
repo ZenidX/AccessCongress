@@ -124,6 +124,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (firebaseUser) {
         const userData = await fetchUserData(firebaseUser);
         setUser(userData);
+
+        // Sync claims for existing sessions (handles users without claims)
+        // This runs in background and doesn't block the UI
+        syncAndRefreshClaims().catch((err) => {
+          console.warn('⚠️ AuthContext: Background claims sync failed:', err);
+        });
       } else {
         console.log('🚪 AuthContext: User not authenticated');
         setUser(null);
@@ -157,10 +163,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('✅ AuthContext: User data loaded:', userData?.email);
 
       // Sync Custom Claims after login to ensure they're up to date
-      // This runs in background and doesn't block the login
-      syncAndRefreshClaims().catch((err) => {
-        console.warn('⚠️ AuthContext: Could not sync claims on login:', err);
-      });
+      // Wait for sync to complete (with timeout) to ensure claims are available
+      try {
+        await Promise.race([
+          syncAndRefreshClaims(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+        ]);
+        console.log('✅ AuthContext: Claims synced successfully');
+      } catch (err) {
+        console.warn('⚠️ AuthContext: Could not sync claims on login (continuing anyway):', err);
+        // Continue anyway - the trigger will eventually sync claims
+      }
 
       return { success: true };
     } catch (error: any) {

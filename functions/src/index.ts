@@ -19,3 +19,4 @@ export { deleteUser } from './functions/deleteUser';
 
 // Exportar funciones de Custom Claims
 export { syncUserClaims, refreshUserClaims } from './functions/syncUserClaims';
+export { migrateUserClaims } from './functions/migrateUserClaims';
