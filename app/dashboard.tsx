@@ -492,56 +492,55 @@ export default function DashboardScreen() {
         </ThemedView>
       </Modal>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header: Logo + Login */}
-        <View style={styles.headerContainer}>
-          <View style={styles.logoContainer}>
-            <Image
-              source={{ uri: 'https://impulseducacio.org/wp-content/uploads/2020/02/logo-web-impuls.png' }}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </View>
-          <View style={styles.loginContainer}>
-            <LoginButton />
-          </View>
+      {/* Header común para web y móvil */}
+      <View style={styles.headerContainer}>
+        <View style={styles.logoContainer}>
+          <Image
+            source={{ uri: 'https://impulseducacio.org/wp-content/uploads/2020/02/logo-web-impuls.png' }}
+            style={styles.logo}
+            resizeMode="contain"
+          />
         </View>
+        <View style={styles.loginContainer}>
+          <LoginButton />
+        </View>
+      </View>
 
-        {/* Current event indicator - clickable to change */}
-        {currentEvent ? (
-          <TouchableOpacity
-            style={[styles.eventBanner, { backgroundColor: Colors.light.success + '20' }]}
-            onPress={() => setShowEventSelector(true)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.eventBannerIcon]}>📅</Text>
-            <View style={styles.eventBannerText}>
-              <Text style={[styles.eventBannerLabel, { color: Colors.light.success }]}>
-                Evento activo (toca para cambiar)
-              </Text>
-              <Text style={[styles.eventBannerName, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}>
-                {currentEvent.name}
-              </Text>
-            </View>
-            <Text style={styles.eventBannerChangeIcon}>✏️</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[styles.eventBanner, { backgroundColor: Colors.light.warning + '20' }]}
-            onPress={() => setShowEventSelector(true)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.eventBannerIcon]}>⚠️</Text>
-            <Text style={[styles.eventBannerLabel, { color: Colors.light.warning }]}>
-              Toca para seleccionar un evento
+      {/* Current event indicator - clickable to change */}
+      {currentEvent ? (
+        <TouchableOpacity
+          style={[styles.eventBanner, { backgroundColor: Colors.light.success + '20' }]}
+          onPress={() => setShowEventSelector(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.eventBannerIcon]}>📅</Text>
+          <View style={styles.eventBannerText}>
+            <Text style={[styles.eventBannerLabel, { color: Colors.light.success }]}>
+              Evento activo (toca para cambiar)
             </Text>
-          </TouchableOpacity>
-        )}
+            <Text style={[styles.eventBannerName, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}>
+              {currentEvent.name}
+            </Text>
+          </View>
+          <Text style={styles.eventBannerChangeIcon}>✏️</Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          style={[styles.eventBanner, { backgroundColor: Colors.light.warning + '20' }]}
+          onPress={() => setShowEventSelector(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.eventBannerIcon]}>⚠️</Text>
+          <Text style={[styles.eventBannerLabel, { color: Colors.light.warning }]}>
+            Toca para seleccionar un evento
+          </Text>
+        </TouchableOpacity>
+      )}
 
-        {/* Layout de dos columnas para web, una columna para móvil */}
-        {isWeb && isWideScreen ? (
-          // WEB: Layout de dos columnas fijas
-          <View style={styles.webTwoColumnContainer}>
+      {/* Layout de dos columnas para web, una columna para móvil */}
+      {isWeb && isWideScreen ? (
+        // WEB: Layout de dos columnas fijas (sin scroll de página)
+        <View style={styles.webTwoColumnContainer}>
             {/* Columna izquierda - 2/5 */}
             <View style={styles.webLeftColumn}>
               {/* Selector de Modo - siempre expandido en web */}
@@ -780,8 +779,8 @@ export default function DashboardScreen() {
             </View>
           </View>
         ) : (
-          // MÓVIL: Layout original de una columna
-          <>
+          // MÓVIL: Layout original de una columna con scroll
+          <ScrollView contentContainerStyle={styles.scrollContent}>
             {/* Selector de Modo */}
             <View style={styles.modeSection}>
               <ThemedText style={styles.sectionTitle}>Selecciona el Modo</ThemedText>
@@ -1043,9 +1042,8 @@ export default function DashboardScreen() {
                 )}
               </View>
             </View>
-          </>
+          </ScrollView>
         )}
-    </ScrollView>
     <View style={styles.footer}>
         <BackButton style={{ margin: 0 }} />
     </View>
@@ -1559,23 +1557,30 @@ const styles = StyleSheet.create({
   webLeftColumn: {
     flex: 2,
     minWidth: 320,
+    display: 'flex',
+    flexDirection: 'column',
   },
   webRightColumn: {
     flex: 3,
     minWidth: 400,
-  },
-  // Selector de modo siempre visible en web (vertical)
-  modeSelectorWeb: {
+    display: 'flex',
     flexDirection: 'column',
+  },
+  // Selector de modo siempre visible en web (horizontal como móvil)
+  modeSelectorWeb: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.xs,
     marginBottom: Spacing.md,
   },
   modeButtonWeb: {
-    flexDirection: 'row',
+    flex: 1,
+    minWidth: '22%',
+    flexDirection: 'column',
     alignItems: 'center',
+    justifyContent: 'center',
     padding: Spacing.md,
     borderRadius: BorderRadius.md,
-    gap: Spacing.sm,
   },
   // Botones de dirección deshabilitados
   directionButtonDisabled: {
@@ -1585,16 +1590,20 @@ const styles = StyleSheet.create({
   directionButtonTextDisabled: {
     opacity: 0.5,
   },
-  // Contenedor de cámara inline
+  // Contenedor de cámara inline (usa flex para llenar espacio disponible)
   inlineCameraContainer: {
+    flex: 1,
     marginTop: Spacing.md,
     paddingHorizontal: Spacing.md,
+    minHeight: 200,
   },
-  // Sección de logs para web
+  // Sección de logs para web (usa flex para llenar espacio disponible)
   webLogsSection: {
     flex: 1,
     paddingHorizontal: Spacing.md,
     marginTop: Spacing.md,
+    display: 'flex',
+    flexDirection: 'column',
   },
   webSubsectionTitle: {
     fontSize: FontSizes.lg,
@@ -1604,7 +1613,6 @@ const styles = StyleSheet.create({
   },
   webLogsScrollContainer: {
     flex: 1,
-    maxHeight: 400,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.1)',
