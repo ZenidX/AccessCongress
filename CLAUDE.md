@@ -162,9 +162,25 @@ The Firebase config is in `config/firebase.ts`. For new environments:
 1. Create Firebase project at console.firebase.google.com
 2. Enable Firestore Database
 3. Update `firebaseConfig` object in `config/firebase.ts`
-4. Set Firestore rules (see INSTRUCCIONES_SETUP.md for production-ready rules)
+4. Deploy Firestore rules with `firebase deploy --only firestore:rules`
 
-Current rules allow open read/write for development. **Must be restricted for production.**
+### Security Rules (firestore.rules)
+
+The Firestore security rules are **production-ready** with comprehensive access control:
+
+- **Role-based access**: 4-level hierarchy (super_admin, admin_responsable, admin, controlador)
+- **Organization isolation**: Users can only access data within their organization
+- **Event-level permissions**: Controllers only access their assigned events
+- **Immutable audit logs**: `access_logs` and `emailLogs` cannot be modified or deleted
+- **Default deny**: All unspecified paths are blocked
+
+Key rules:
+- Super admin is hardcoded by email (`zenid77@gmail.com`)
+- Admin roles can manage events/participants in their organization
+- Controllers can update participant status (for scanning) but not delete
+- Users cannot change their own role or organization
+
+Legacy collections (`/participants`, `/access_logs` at root level) have more permissive rules for backward compatibility.
 
 ## Key Implementation Notes
 
