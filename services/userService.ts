@@ -30,6 +30,56 @@ import {
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions } from '@/config/firebase';
+
+// ============================================
+// Custom Claims Management
+// ============================================
+
+/**
+ * Refresh the current user's ID token to get updated Custom Claims
+ * Call this after user data (role, organization, events) is modified
+ */
+export async function refreshCurrentUserToken(): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    console.warn('No hay usuario autenticado para refrescar token');
+    return;
+  }
+
+  try {
+    // Force token refresh to get updated claims
+    await currentUser.getIdToken(true);
+    console.log('✅ Token refrescado con nuevos Custom Claims');
+  } catch (error) {
+    console.error('Error refrescando token:', error);
+    throw new Error('No se pudo refrescar el token');
+  }
+}
+
+/**
+ * Call Cloud Function to sync Custom Claims for current user
+ * Then refresh the token locally
+ */
+export async function syncAndRefreshClaims(): Promise<void> {
+  try {
+    const refreshClaimsFn = httpsCallable<
+      Record<string, never>,
+      { success: boolean; message: string; claims: { role: string; orgId: string | null; events: string[] } }
+    >(functions, 'refreshUserClaims');
+
+    const result = await refreshClaimsFn({});
+
+    if (result.data.success) {
+      // Force local token refresh to get the updated claims
+      await refreshCurrentUserToken();
+      console.log('✅ Claims sincronizados:', result.data.claims);
+    }
+  } catch (error) {
+    console.error('Error sincronizando claims:', error);
+    // Don't throw - claims will be synced by the Firestore trigger eventually
+  }
+}
+
 import {
   UserRole,
   User,
@@ -245,6 +295,8 @@ export async function getUserData(uid: string): Promise<User | null> {
 
 /**
  * Update user role
+ * NOTE: Custom Claims will be auto-synced by Cloud Function trigger.
+ * If updating the current user, call refreshCurrentUserToken() after this.
  */
 export async function updateUserRole(uid: string, role: UserRole): Promise<void> {
   try {
@@ -258,6 +310,12 @@ export async function updateUserRole(uid: string, role: UserRole): Promise<void>
       role,
       updatedAt: Date.now(),
     });
+
+    // If updating the current user, refresh their token
+    if (auth.currentUser?.uid === uid) {
+      // Small delay to allow the Cloud Function trigger to run
+      setTimeout(() => refreshCurrentUserToken(), 1500);
+    }
   } catch (error) {
     console.error('Error updating role:', error);
     throw new Error('No se pudo actualizar el rol del usuario');
@@ -287,6 +345,7 @@ export async function updateUser(uid: string, data: UpdateUserData): Promise<voi
 
 /**
  * Assign events to a user (replace all assignments)
+ * NOTE: Custom Claims will be auto-synced by Cloud Function trigger.
  */
 export async function assignEventsToUser(
   uid: string,
@@ -298,6 +357,11 @@ export async function assignEventsToUser(
       assignedEventIds: eventIds,
       updatedAt: Date.now(),
     });
+
+    // If updating the current user, refresh their token
+    if (auth.currentUser?.uid === uid) {
+      setTimeout(() => refreshCurrentUserToken(), 1500);
+    }
   } catch (error) {
     console.error('Error assigning events:', error);
     throw new Error('No se pudieron asignar los eventos');
@@ -306,6 +370,7 @@ export async function assignEventsToUser(
 
 /**
  * Add a single event to user's assignments
+ * NOTE: Custom Claims will be auto-synced by Cloud Function trigger.
  */
 export async function addEventToUser(uid: string, eventId: string): Promise<void> {
   try {
@@ -314,6 +379,11 @@ export async function addEventToUser(uid: string, eventId: string): Promise<void
       assignedEventIds: arrayUnion(eventId),
       updatedAt: Date.now(),
     });
+
+    // If updating the current user, refresh their token
+    if (auth.currentUser?.uid === uid) {
+      setTimeout(() => refreshCurrentUserToken(), 1500);
+    }
   } catch (error) {
     console.error('Error adding event to user:', error);
     throw new Error('No se pudo agregar el evento al usuario');
@@ -322,6 +392,7 @@ export async function addEventToUser(uid: string, eventId: string): Promise<void
 
 /**
  * Remove a single event from user's assignments
+ * NOTE: Custom Claims will be auto-synced by Cloud Function trigger.
  */
 export async function removeEventFromUser(uid: string, eventId: string): Promise<void> {
   try {
@@ -330,6 +401,11 @@ export async function removeEventFromUser(uid: string, eventId: string): Promise
       assignedEventIds: arrayRemove(eventId),
       updatedAt: Date.now(),
     });
+
+    // If updating the current user, refresh their token
+    if (auth.currentUser?.uid === uid) {
+      setTimeout(() => refreshCurrentUserToken(), 1500);
+    }
   } catch (error) {
     console.error('Error removing event from user:', error);
     throw new Error('No se pudo quitar el evento del usuario');

@@ -118,13 +118,24 @@ export const createUser = onCall(
       console.log(`✅ Documento de usuario creado en Firestore`);
 
       // 9. Si es admin_responsable, actualizar su organizationId a su propio UID
+      let finalOrgId = organizationId;
       if (role === 'admin_responsable') {
+        finalOrgId = userRecord.uid;
         await db.collection(USERS_COLLECTION).doc(userRecord.uid).update({
-          organizationId: userRecord.uid,
+          organizationId: finalOrgId,
           updatedAt: Date.now(),
         });
         console.log(`✅ OrganizationId actualizado para admin_responsable`);
       }
+
+      // 10. Establecer Custom Claims inmediatamente
+      // Esto asegura que los claims estén disponibles antes de que el trigger de Firestore se ejecute
+      await admin.auth().setCustomUserClaims(userRecord.uid, {
+        role: role,
+        orgId: finalOrgId,
+        events: [],
+      });
+      console.log(`✅ Custom Claims establecidos para el nuevo usuario`);
 
       return {
         success: true,

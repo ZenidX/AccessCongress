@@ -16,3 +16,6 @@ export { sendBulkEmail } from './functions/sendBulkEmail';
 // Exportar funciones de usuarios
 export { createUser } from './functions/createUser';
 export { deleteUser } from './functions/deleteUser';
+
+// Exportar funciones de Custom Claims
+export { syncUserClaims, refreshUserClaims } from './functions/syncUserClaims';

@@ -4,53 +4,74 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ============================================
-    // HELPER FUNCTIONS
+    // HELPER FUNCTIONS (Optimized with Custom Claims)
     // ============================================
-
-    // Get user data from Firestore
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
+    //
+    // Las funciones usan Custom Claims del token JWT en lugar de leer
+    // el documento de usuario de Firestore. Esto elimina reads adicionales
+    // y mejora el rendimiento.
+    //
+    // Custom Claims disponibles:
+    // - request.auth.token.role: rol del usuario
+    // - request.auth.token.orgId: organizationId del usuario
+    // - request.auth.token.events: array de eventIds asignados
+    //
 
     // Check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Check if user is super admin (hardcoded email)
+    // Check if user is super admin (by email - fallback)
     function isSuperAdmin() {
       return isAuthenticated() &&
              request.auth.token.email.lower() == 'zenid77@gmail.com';
     }
 
-    // Check if user has a specific role
+    // Check if user has a specific role (using Custom Claims)
     function hasRole(role) {
-      return isAuthenticated() && getUserData().role == role;
+      return isAuthenticated() && request.auth.token.role == role;
     }
 
-    // Check if user is any admin role
+    // Get user role from Custom Claims
+    function getUserRole() {
+      return request.auth.token.role;
+    }
+
+    // Get user organization from Custom Claims
+    function getUserOrgId() {
+      return request.auth.token.orgId;
+    }
+
+    // Check if user is any admin role (using Custom Claims)
     function isAnyAdmin() {
       return isSuperAdmin() ||
              hasRole('admin_responsable') ||
              hasRole('admin');
     }
 
-    // Check if user belongs to organization
+    // Check if user belongs to organization (using Custom Claims)
     function belongsToOrganization(orgId) {
-      return isAuthenticated() && getUserData().organizationId == orgId;
+      return isAuthenticated() && request.auth.token.orgId == orgId;
     }
 
-    // Check if user can access event (based on role and assignments)
+    // Check if user can access event (using Custom Claims)
+    // NOTE: Still needs one get() for event data to check organizationId
     function canAccessEvent(eventId) {
-      let user = getUserData();
       let eventData = get(/databases/$(database)/documents/events/$(eventId)).data;
 
       // Super admin can access all events
       // Admin roles can access events in their organization
-      // Controllers can only access assigned events
+      // Controllers can only access assigned events in their token
       return isSuperAdmin() ||
-             (user.role in ['admin_responsable', 'admin'] && eventData.organizationId == user.organizationId) ||
-             (user.role == 'controlador' && 'assignedEventIds' in user && eventId in user.assignedEventIds);
+             (getUserRole() in ['admin_responsable', 'admin'] && eventData.organizationId == getUserOrgId()) ||
+             (getUserRole() == 'controlador' && eventId in request.auth.token.events);
+    }
+
+    // Legacy: Get user data from Firestore (only for user document rules)
+    // Used sparingly where we need to read the actual document being modified
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     // ============================================
@@ -77,14 +98,12 @@ service cloud.firestore {
     // ============================================
     match /events/{eventId} {
       // Allow read if user can access the event
-      // NOTE: Using resource.data instead of canAccessEvent() for queries to work
-      // canAccessEvent uses get() which doesn't work for list queries
+      // Using Custom Claims - NO Firestore reads needed!
       allow read: if isSuperAdmin() ||
-                    (getUserData().role in ['admin_responsable', 'admin'] &&
-                     resource.data.organizationId == getUserData().organizationId) ||
-                    (getUserData().role == 'controlador' &&
-                     'assignedEventIds' in getUserData() &&
-                     eventId in getUserData().assignedEventIds);
+                    (getUserRole() in ['admin_responsable', 'admin'] &&
+                     resource.data.organizationId == getUserOrgId()) ||
+                    (getUserRole() == 'controlador' &&
+                     eventId in request.auth.token.events);
 
       // Admin roles can create events in their organization
       allow create: if isAnyAdmin();
@@ -172,16 +191,17 @@ service cloud.firestore {
       // Admins can create controllers in their org
       // NEW: Allow user to create their own document (needed because createUserWithEmailAndPassword
       //      switches the session to the new user before we can write to Firestore)
+      // Using Custom Claims for organizationId check - NO Firestore reads!
       allow create: if isSuperAdmin() ||
                       // User can create their own document (but not as super_admin)
                       (request.auth.uid == userId &&
                        request.resource.data.role != 'super_admin') ||
                       (hasRole('admin_responsable') &&
                        request.resource.data.role in ['admin', 'controlador'] &&
-                       request.resource.data.organizationId == getUserData().organizationId) ||
+                       request.resource.data.organizationId == getUserOrgId()) ||
                       (hasRole('admin') &&
                        request.resource.data.role == 'controlador' &&
-                       request.resource.data.organizationId == getUserData().organizationId);
+                       request.resource.data.organizationId == getUserOrgId());
 
       // Users can update their own profile (except role)
       // Admin roles can update users they manage

@@ -15,6 +15,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
+import { syncAndRefreshClaims } from '@/services/userService';
 import {
   UserRole,
   User,
@@ -154,6 +155,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userData = await fetchUserData(userCredential.user);
       setUser(userData);
       console.log('✅ AuthContext: User data loaded:', userData?.email);
+
+      // Sync Custom Claims after login to ensure they're up to date
+      // This runs in background and doesn't block the login
+      syncAndRefreshClaims().catch((err) => {
+        console.warn('⚠️ AuthContext: Could not sync claims on login:', err);
+      });
 
       return { success: true };
     } catch (error: any) {
