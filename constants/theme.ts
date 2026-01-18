@@ -145,3 +145,32 @@ export const Shadows = {
     elevation: 6,
   },
 };
+
+// Responsive breakpoints
+export const Breakpoints = {
+  mobile: 600,    // < 600px = mobile
+  tablet: 900,    // 600-899px = tablet, >= 900px = desktop
+  desktop: 900,   // Alias for clarity
+  wide: 1200,     // Extra wide screens
+} as const;
+
+// Responsive spacing multipliers
+export const ResponsiveSpacing = {
+  mobile: {
+    multiplier: 0.85,
+    container: Spacing.sm,
+    section: Spacing.md,
+  },
+  tablet: {
+    multiplier: 1,
+    container: Spacing.md,
+    section: Spacing.lg,
+  },
+  desktop: {
+    multiplier: 1.15,
+    container: Spacing.lg,
+    section: Spacing.xl,
+  },
+} as const;
+
+export type DeviceType = 'mobile' | 'tablet' | 'desktop';

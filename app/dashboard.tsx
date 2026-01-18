@@ -17,8 +17,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
-  RefreshControl,
   Image,
   ScrollView,
   Platform,
@@ -39,11 +37,13 @@ import { Participant, AccessMode, AccessDirection, AccessLog } from '@/types/par
 import { Event } from '@/types/event';
 import { Colors, BorderRadius, Spacing, Shadows, FontSizes } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { useApp } from '@/contexts/AppContext';
 import { LoginButton } from '@/components/forms/LoginButton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEvent } from '@/contexts/EventContext';
 import { BackButton } from '@/components/navigation/BackButton';
+import { InlineCameraScanner } from '@/components/scanner/InlineCameraScanner';
 import { getAllEvents, getEventsByOrganization, getEventsByIds } from '@/services/eventService';
 
 type Location = 'registrados' | 'aula_magna' | 'master_class' | 'cena';
@@ -85,6 +85,8 @@ const LOCATIONS: LocationInfo[] = [
 export default function DashboardScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
+  const { isWideScreen } = useResponsiveLayout();
+  const isWeb = Platform.OS === 'web';
 
   // Contexto global para modo y dirección de escaneo
   const { setModo, setDireccion } = useApp();
@@ -110,8 +112,15 @@ export default function DashboardScreen() {
   // Dirección de escaneo (entrada/salida)
   const [scanDirection, setScanDirection] = useState<AccessDirection>('entrada');
 
-  // Estado para controlar si el selector de modo está expandido
+  // Estado para controlar si el selector de modo está expandido (solo móvil)
   const [modeExpanded, setModeExpanded] = useState(false);
+
+  // Estado para el último resultado del scanner inline (web)
+  const [lastScanResult, setLastScanResult] = useState<{
+    success: boolean;
+    message: string;
+    participant?: Participant;
+  } | null>(null);
 
   // Estadísticas del modo seleccionado
   const [stats, setStats] = useState<{
@@ -293,6 +302,15 @@ export default function DashboardScreen() {
     setModo(selectedMode);
     setDireccion(scanDirection);
     router.push('/scanner');
+  };
+
+  /**
+   * Maneja el resultado del escáner inline (web)
+   */
+  const handleInlineScanResult = (success: boolean, message: string, participant?: Participant) => {
+    setLastScanResult({ success, message, participant });
+    // Auto-clear después de 4 segundos
+    setTimeout(() => setLastScanResult(null), 4000);
   };
 
   const renderParticipant = ({ item }: { item: Participant }) => (
@@ -520,281 +538,513 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Selector de Modo (unificado para escaneo y estadísticas) */}
-        <View style={styles.modeSection}>
-          <ThemedText style={styles.sectionTitle}>Selecciona el Modo</ThemedText>
+        {/* Layout de dos columnas para web, una columna para móvil */}
+        {isWeb && isWideScreen ? (
+          // WEB: Layout de dos columnas fijas
+          <View style={styles.webTwoColumnContainer}>
+            {/* Columna izquierda - 2/5 */}
+            <View style={styles.webLeftColumn}>
+              {/* Selector de Modo - siempre expandido en web */}
+              <View style={styles.modeSection}>
+                <ThemedText style={styles.sectionTitle}>Selecciona el Modo</ThemedText>
+                <View style={styles.modeSelectorWeb}>
+                  {MODES.map((mode) => (
+                    <TouchableOpacity
+                      key={mode.key}
+                      style={[
+                        styles.modeButtonWeb,
+                        {
+                          backgroundColor:
+                            selectedMode === mode.key
+                              ? mode.color
+                              : colorScheme === 'dark'
+                              ? 'rgba(255,255,255,0.1)'
+                              : 'rgba(0,0,0,0.1)',
+                        },
+                      ]}
+                      onPress={() => setSelectedMode(mode.key)}
+                    >
+                      <Text style={styles.modeIcon}>{mode.icono}</Text>
+                      <Text
+                        style={[
+                          styles.modeText,
+                          {
+                            color:
+                              selectedMode === mode.key
+                                ? '#fff'
+                                : colorScheme === 'dark'
+                                ? '#fff'
+                                : '#000',
+                          },
+                        ]}
+                      >
+                        {mode.titulo}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
 
-          {/* Fila superior: menú hamburguesa + modo seleccionado (siempre visible) */}
-          <View style={styles.modeRowContainer}>
-            {/* Botón de menú hamburguesa */}
-            <TouchableOpacity
-              style={[
-                styles.hamburgerButton,
-                {
-                  backgroundColor:
-                    colorScheme === 'dark'
-                      ? 'rgba(255,255,255,0.15)'
-                      : 'rgba(0,0,0,0.1)',
-                },
-                Shadows.medium,
-              ]}
-              onPress={() => setModeExpanded(!modeExpanded)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.hamburgerIcon}>{modeExpanded ? '✕' : '☰'}</Text>
-            </TouchableOpacity>
+              {/* Selector de dirección - siempre visible en web, deshabilitado en registro */}
+              <View style={styles.scanControls}>
+                <View style={styles.directionSelector}>
+                  <TouchableOpacity
+                    style={[
+                      styles.directionButton,
+                      scanDirection === 'entrada' && selectedMode !== 'registro' && styles.directionButtonActive,
+                      scanDirection === 'entrada' && selectedMode !== 'registro' && { backgroundColor: Colors.light.directionEntrada },
+                      selectedMode === 'registro' && styles.directionButtonDisabled,
+                    ]}
+                    onPress={() => selectedMode !== 'registro' && setScanDirection('entrada')}
+                    disabled={selectedMode === 'registro'}
+                  >
+                    <Text style={[
+                      styles.directionButtonText,
+                      scanDirection === 'entrada' && selectedMode !== 'registro' && styles.directionButtonTextActive,
+                      selectedMode === 'registro' && styles.directionButtonTextDisabled,
+                    ]}>
+                      ⬇️ Entrada
+                    </Text>
+                  </TouchableOpacity>
 
-            {/* Modo seleccionado actual - clickable para expandir/colapsar */}
-            <TouchableOpacity
-              style={[
-                styles.modeSelectorCollapsed,
-                { backgroundColor: selectedModeInfo?.color },
-                Shadows.medium,
-              ]}
-              onPress={() => setModeExpanded(!modeExpanded)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.modeIconLarge}>{selectedModeInfo?.icono}</Text>
-              <Text style={styles.modeTextLarge}>{selectedModeInfo?.titulo}</Text>
-            </TouchableOpacity>
-          </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.directionButton,
+                      scanDirection === 'salida' && selectedMode !== 'registro' && styles.directionButtonActive,
+                      scanDirection === 'salida' && selectedMode !== 'registro' && { backgroundColor: Colors.light.directionSalida },
+                      selectedMode === 'registro' && styles.directionButtonDisabled,
+                    ]}
+                    onPress={() => selectedMode !== 'registro' && setScanDirection('salida')}
+                    disabled={selectedMode === 'registro'}
+                  >
+                    <Text style={[
+                      styles.directionButtonText,
+                      scanDirection === 'salida' && selectedMode !== 'registro' && styles.directionButtonTextActive,
+                      selectedMode === 'registro' && styles.directionButtonTextDisabled,
+                    ]}>
+                      ⬆️ Salida
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
-          {/* Opciones de modo (se muestran debajo cuando está expandido) */}
-          {modeExpanded && (
-            <View style={styles.modeSelector}>
-              {MODES.map((mode) => (
+                {/* Botón para abrir escáner en nueva ventana */}
                 <TouchableOpacity
-                  key={mode.key}
                   style={[
-                    styles.modeButton,
+                    styles.scanButton,
+                    Shadows.strong,
                     {
-                      backgroundColor:
-                        selectedMode === mode.key
-                          ? mode.color
-                          : colorScheme === 'dark'
-                          ? 'rgba(255,255,255,0.1)'
-                          : 'rgba(0,0,0,0.1)',
+                      backgroundColor: selectedModeInfo?.color,
+                      opacity: user ? 1 : 0.5,
                     },
                   ]}
-                  onPress={() => handleModeSelection(mode.key)}
+                  onPress={handleOpenScanner}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.modeIcon}>{mode.icono}</Text>
-                  <Text
-                    style={[
-                      styles.modeText,
-                      {
-                        color:
-                          selectedMode === mode.key
-                            ? '#fff'
-                            : colorScheme === 'dark'
-                            ? '#fff'
-                            : '#000',
-                      },
-                    ]}
-                  >
-                    {mode.titulo}
+                  <Text style={styles.scanButtonIcon}>📷</Text>
+                  <Text style={styles.scanButtonText}>
+                    {user ? 'Abrir Escáner' : 'Escáner (requiere login)'}
                   </Text>
                 </TouchableOpacity>
-              ))}
+              </View>
+
+              {/* Cámara inline para web */}
+              {user && (
+                <View style={styles.inlineCameraContainer}>
+                  <ThemedText style={styles.subsectionTitle}>Cámara</ThemedText>
+                  <InlineCameraScanner onScanResult={handleInlineScanResult} />
+                </View>
+              )}
             </View>
-          )}
-        </View>
 
-      {/* Controles de Escaneo */}
-      <View style={styles.scanControls}>
-        {/* Selector de dirección (solo si no es registro) */}
-        {selectedMode !== 'registro' && (
-          <View style={styles.directionSelector}>
-            <TouchableOpacity
-              style={[
-                styles.directionButton,
-                scanDirection === 'entrada' && styles.directionButtonActive,
-                scanDirection === 'entrada' && { backgroundColor: Colors.light.directionEntrada },
-              ]}
-              onPress={() => setScanDirection('entrada')}
-            >
-              <Text style={[
-                styles.directionButtonText,
-                scanDirection === 'entrada' && styles.directionButtonTextActive
-              ]}>
-                ⬇️ Entrada
-              </Text>
-            </TouchableOpacity>
+            {/* Columna derecha - 3/5 */}
+            <View style={styles.webRightColumn}>
+              {/* Estadísticas del modo seleccionado */}
+              <View style={styles.statsSection}>
+                <ThemedText style={styles.sectionTitle}>
+                  {selectedModeInfo?.icono} {selectedModeInfo?.titulo}
+                </ThemedText>
 
-            <TouchableOpacity
-              style={[
-                styles.directionButton,
-                scanDirection === 'salida' && styles.directionButtonActive,
-                scanDirection === 'salida' && { backgroundColor: Colors.light.directionSalida },
-              ]}
-              onPress={() => setScanDirection('salida')}
-            >
-              <Text style={[
-                styles.directionButtonText,
-                scanDirection === 'salida' && styles.directionButtonTextActive
-              ]}>
-                ⬆️ Salida
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+                {/* Indicadores */}
+                <View style={styles.indicatorsRow}>
+                  <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
+                    <Text style={styles.indicatorNumber}>{participants.length}</Text>
+                    <Text style={styles.indicatorLabel}>
+                      {selectedMode === 'registro' ? 'Registrados' : 'Ahora mismo'}
+                    </Text>
+                  </View>
 
-        {/* Botón para abrir escáner - Solo habilitado si hay usuario autenticado */}
-        <TouchableOpacity
-          style={[
-            styles.scanButton,
-            Shadows.strong,
-            {
-              backgroundColor: selectedModeInfo?.color,
-              opacity: user ? 1 : 0.5,
-            },
-          ]}
-          onPress={handleOpenScanner}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.scanButtonIcon}>📷</Text>
-          <Text style={styles.scanButtonText}>
-            {user ? 'Escanear QR' : 'Escanear QR (requiere login)'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+                  <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
+                    <Text style={styles.indicatorNumber}>{stats.maxSimultaneous}</Text>
+                    <Text style={styles.indicatorLabel}>
+                      {selectedMode === 'registro' ? 'Total' : 'Máximo'}
+                    </Text>
+                  </View>
 
-      {/* Divider */}
-      <View style={styles.divider} />
+                  {selectedMode !== 'registro' && (
+                    <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
+                      <Text style={styles.indicatorNumber}>{stats.uniqueEntrances}</Text>
+                      <Text style={styles.indicatorLabel}>Han entrado</Text>
+                    </View>
+                  )}
 
-      {/* Estadísticas del modo seleccionado */}
-      <View style={styles.statsSection}>
-        <ThemedText style={styles.sectionTitle}>
-          {selectedModeInfo?.icono} {selectedModeInfo?.titulo}
-        </ThemedText>
+                  <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color, opacity: 0.8 }]}>
+                    <Text style={styles.indicatorNumber}>{potentialCounts[selectedMode]}</Text>
+                    <Text style={styles.indicatorLabel}>Previstos</Text>
+                  </View>
+                </View>
+              </View>
 
-        {/* Indicadores */}
-        <View style={styles.indicatorsRow}>
-          {/* Indicador 1: En tiempo real */}
-          <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
-            <Text style={styles.indicatorNumber}>{participants.length}</Text>
-            <Text style={styles.indicatorLabel}>
-              {selectedMode === 'registro' ? 'Registrados' : 'Ahora mismo'}
-            </Text>
-          </View>
+              {/* Tabla de logs con scroll */}
+              <View style={styles.webLogsSection}>
+                <Text style={[styles.webSubsectionTitle, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}>
+                  {selectedMode === 'registro' ? 'Últimos registros' : 'Últimos accesos'}
+                </Text>
 
-          {/* Indicador 2: Máximo histórico */}
-          <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
-            <Text style={styles.indicatorNumber}>{stats.maxSimultaneous}</Text>
-            <Text style={styles.indicatorLabel}>
-              {selectedMode === 'registro' ? 'Total' : 'Máximo'}
-            </Text>
-          </View>
+                {recentLogs.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyIcon}>📋</Text>
+                    <ThemedText style={styles.emptyText}>
+                      {selectedMode === 'registro'
+                        ? 'Aún no hay registros'
+                        : 'Aún no hay accesos registrados'}
+                    </ThemedText>
+                  </View>
+                ) : (
+                  <ScrollView style={[styles.webLogsScrollContainer, { borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' }]}>
+                    {/* Encabezado de tabla */}
+                    <View style={[styles.webTableHeader, { backgroundColor: colorScheme === 'dark' ? Colors.dark.cardBackground : '#f0f0f0' }]}>
+                      <Text style={[styles.webTableHeaderCell, styles.webTableCellNombre, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Nombre</Text>
+                      <Text style={[styles.webTableHeaderCell, styles.webTableCellDni, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>DNI</Text>
+                      <Text style={[styles.webTableHeaderCell, styles.webTableCellEmail, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Correo</Text>
+                      <Text style={[styles.webTableHeaderCell, styles.webTableCellEntidad, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Entidad</Text>
+                      <Text style={[styles.webTableHeaderCell, styles.webTableCellCargo, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Cargo</Text>
+                      <Text style={[styles.webTableHeaderCell, styles.webTableCellDir, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Dir.</Text>
+                      <Text style={[styles.webTableHeaderCell, styles.webTableCellHora, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Hora</Text>
+                    </View>
 
-          {/* Indicador 3: Participantes únicos */}
-          {selectedMode !== 'registro' && (
-            <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
-              <Text style={styles.indicatorNumber}>{stats.uniqueEntrances}</Text>
-              <Text style={styles.indicatorLabel}>Han entrado</Text>
+                    {/* Filas de tabla */}
+                    {recentLogs.map((log, index) => (
+                      <View
+                        key={`${log.dni}-${log.timestamp}-${index}`}
+                        style={[
+                          styles.webTableRow,
+                          {
+                            backgroundColor: index % 2 === 0
+                              ? (colorScheme === 'dark' ? Colors.dark.cardBackground : '#fff')
+                              : (colorScheme === 'dark' ? 'rgba(255,255,255,0.05)' : '#fafafa'),
+                            borderBottomColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.webTableCell, styles.webTableCellNombre, { color: colorScheme === 'dark' ? '#fff' : '#000' }]} numberOfLines={1}>
+                          {log.nombre}
+                        </Text>
+                        <Text style={[styles.webTableCell, styles.webTableCellDni, { color: colorScheme === 'dark' ? '#fff' : '#000' }]} numberOfLines={1}>
+                          {log.dni}
+                        </Text>
+                        <Text style={[styles.webTableCell, styles.webTableCellEmail, { color: colorScheme === 'dark' ? '#ddd' : '#000' }]} numberOfLines={1}>
+                          {log.email || '-'}
+                        </Text>
+                        <Text style={[styles.webTableCell, styles.webTableCellEntidad, { color: colorScheme === 'dark' ? '#ddd' : '#000' }]} numberOfLines={1}>
+                          {log.escuela || '-'}
+                        </Text>
+                        <Text style={[styles.webTableCell, styles.webTableCellCargo, { color: colorScheme === 'dark' ? '#ddd' : '#000' }]} numberOfLines={1}>
+                          {log.cargo || '-'}
+                        </Text>
+                        <View style={[styles.webTableCellDir]}>
+                          {log.direccion && (
+                            <View style={[
+                              styles.logDirectionBadge,
+                              { backgroundColor: log.direccion === 'entrada'
+                                ? Colors.light.directionEntrada
+                                : Colors.light.directionSalida
+                              }
+                            ]}>
+                              <Text style={styles.logDirectionText}>
+                                {log.direccion === 'entrada' ? '⬇️' : '⬆️'}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={[styles.webTableCell, styles.webTableCellHora, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}>
+                          {new Date(log.timestamp).toLocaleTimeString('es-ES', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
             </View>
-          )}
-
-          {/* Indicador de Previstos */}
-          <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color, opacity: 0.8 }]}>
-            <Text style={styles.indicatorNumber}>{potentialCounts[selectedMode]}</Text>
-            <Text style={styles.indicatorLabel}>Previstos</Text>
           </View>
-        </View>
+        ) : (
+          // MÓVIL: Layout original de una columna
+          <>
+            {/* Selector de Modo */}
+            <View style={styles.modeSection}>
+              <ThemedText style={styles.sectionTitle}>Selecciona el Modo</ThemedText>
 
-        {/* Últimos accesos */}
-        <View style={styles.recentAccessSection}>
-          <ThemedText style={styles.subsectionTitle}>
-            {selectedMode === 'registro' ? 'Últimos registros' : 'Últimos accesos'}
-          </ThemedText>
-
-          {recentLogs.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>📋</Text>
-              <ThemedText style={styles.emptyText}>
-                {selectedMode === 'registro'
-                  ? 'Aún no hay registros'
-                  : 'Aún no hay accesos registrados'}
-              </ThemedText>
-            </View>
-          ) : (
-            <View style={styles.logsContainer}>
-              {recentLogs.map((log, index) => (
-                <View
-                  key={`${log.dni}-${log.timestamp}-${index}`}
+              <View style={styles.modeRowContainer}>
+                <TouchableOpacity
                   style={[
-                    styles.logCard,
-                    colorScheme === 'dark' ? Shadows.light : Shadows.light,
+                    styles.hamburgerButton,
                     {
                       backgroundColor:
                         colorScheme === 'dark'
-                          ? Colors.dark.cardBackground
-                          : Colors.light.cardBackground,
+                          ? 'rgba(255,255,255,0.15)'
+                          : 'rgba(0,0,0,0.1)',
                     },
+                    Shadows.medium,
                   ]}
+                  onPress={() => setModeExpanded(!modeExpanded)}
+                  activeOpacity={0.7}
                 >
-                  <View style={styles.logInfo}>
-                    <ThemedText style={styles.logName}>{log.nombre}</ThemedText>
-                    <ThemedText style={styles.logDni}>DNI: {log.dni}</ThemedText>
-                    {log.email && (
-                      <ThemedText style={styles.logDetail}>📧 {log.email}</ThemedText>
-                    )}
-                    {log.telefono && (
-                      <ThemedText style={styles.logDetail}>📞 {log.telefono}</ThemedText>
-                    )}
-                    {log.escuela && (
-                      <ThemedText style={styles.logDetail}>🏫 {log.escuela}</ThemedText>
-                    )}
-                    {log.cargo && (
-                      <ThemedText style={styles.logDetail}>💼 {log.cargo}</ThemedText>
-                    )}
-                    {/* Badges de permisos */}
-                    {log.permisos && (
-                      <View style={styles.logPermisosRow}>
-                        {log.permisos.master_class && (
-                          <View style={[styles.logPermisoBadge, { backgroundColor: Colors.light.modeMasterClass }]}>
-                            <Text style={styles.logPermisoText}>MC</Text>
-                          </View>
-                        )}
-                        {log.permisos.cena && (
-                          <View style={[styles.logPermisoBadge, { backgroundColor: Colors.light.modeCena }]}>
-                            <Text style={styles.logPermisoText}>Cena</Text>
-                          </View>
-                        )}
-                        {log.haPagado && (
-                          <View style={[styles.logPermisoBadge, { backgroundColor: Colors.light.success }]}>
-                            <Text style={styles.logPermisoText}>✓ Pagado</Text>
-                          </View>
-                        )}
-                      </View>
-                    )}
+                  <Text style={styles.hamburgerIcon}>{modeExpanded ? '✕' : '☰'}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.modeSelectorCollapsed,
+                    { backgroundColor: selectedModeInfo?.color },
+                    Shadows.medium,
+                  ]}
+                  onPress={() => setModeExpanded(!modeExpanded)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.modeIconLarge}>{selectedModeInfo?.icono}</Text>
+                  <Text style={styles.modeTextLarge}>{selectedModeInfo?.titulo}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {modeExpanded && (
+                <View style={styles.modeSelector}>
+                  {MODES.map((mode) => (
+                    <TouchableOpacity
+                      key={mode.key}
+                      style={[
+                        styles.modeButton,
+                        {
+                          backgroundColor:
+                            selectedMode === mode.key
+                              ? mode.color
+                              : colorScheme === 'dark'
+                              ? 'rgba(255,255,255,0.1)'
+                              : 'rgba(0,0,0,0.1)',
+                        },
+                      ]}
+                      onPress={() => handleModeSelection(mode.key)}
+                    >
+                      <Text style={styles.modeIcon}>{mode.icono}</Text>
+                      <Text
+                        style={[
+                          styles.modeText,
+                          {
+                            color:
+                              selectedMode === mode.key
+                                ? '#fff'
+                                : colorScheme === 'dark'
+                                ? '#fff'
+                                : '#000',
+                          },
+                        ]}
+                      >
+                        {mode.titulo}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Controles de Escaneo */}
+            <View style={styles.scanControls}>
+              {selectedMode !== 'registro' && (
+                <View style={styles.directionSelector}>
+                  <TouchableOpacity
+                    style={[
+                      styles.directionButton,
+                      scanDirection === 'entrada' && styles.directionButtonActive,
+                      scanDirection === 'entrada' && { backgroundColor: Colors.light.directionEntrada },
+                    ]}
+                    onPress={() => setScanDirection('entrada')}
+                  >
+                    <Text style={[
+                      styles.directionButtonText,
+                      scanDirection === 'entrada' && styles.directionButtonTextActive
+                    ]}>
+                      ⬇️ Entrada
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.directionButton,
+                      scanDirection === 'salida' && styles.directionButtonActive,
+                      scanDirection === 'salida' && { backgroundColor: Colors.light.directionSalida },
+                    ]}
+                    onPress={() => setScanDirection('salida')}
+                  >
+                    <Text style={[
+                      styles.directionButtonText,
+                      scanDirection === 'salida' && styles.directionButtonTextActive
+                    ]}>
+                      ⬆️ Salida
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[
+                  styles.scanButton,
+                  Shadows.strong,
+                  {
+                    backgroundColor: selectedModeInfo?.color,
+                    opacity: user ? 1 : 0.5,
+                  },
+                ]}
+                onPress={handleOpenScanner}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.scanButtonIcon}>📷</Text>
+                <Text style={styles.scanButtonText}>
+                  {user ? 'Escanear QR' : 'Escanear QR (requiere login)'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.divider} />
+
+            {/* Estadísticas del modo seleccionado */}
+            <View style={styles.statsSection}>
+              <ThemedText style={styles.sectionTitle}>
+                {selectedModeInfo?.icono} {selectedModeInfo?.titulo}
+              </ThemedText>
+
+              <View style={styles.indicatorsRow}>
+                <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
+                  <Text style={styles.indicatorNumber}>{participants.length}</Text>
+                  <Text style={styles.indicatorLabel}>
+                    {selectedMode === 'registro' ? 'Registrados' : 'Ahora mismo'}
+                  </Text>
+                </View>
+
+                <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
+                  <Text style={styles.indicatorNumber}>{stats.maxSimultaneous}</Text>
+                  <Text style={styles.indicatorLabel}>
+                    {selectedMode === 'registro' ? 'Total' : 'Máximo'}
+                  </Text>
+                </View>
+
+                {selectedMode !== 'registro' && (
+                  <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
+                    <Text style={styles.indicatorNumber}>{stats.uniqueEntrances}</Text>
+                    <Text style={styles.indicatorLabel}>Han entrado</Text>
                   </View>
-                  <View style={styles.logMeta}>
-                    {log.direccion && (
-                      <View style={[
-                        styles.logDirectionBadge,
-                        { backgroundColor: log.direccion === 'entrada'
-                          ? Colors.light.directionEntrada
-                          : Colors.light.directionSalida
-                        }
-                      ]}>
-                        <Text style={styles.logDirectionText}>
-                          {log.direccion === 'entrada' ? '⬇️' : '⬆️'}
-                        </Text>
-                      </View>
-                    )}
-                    <ThemedText style={styles.logTime}>
-                      {new Date(log.timestamp).toLocaleTimeString('es-ES', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                )}
+
+                <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color, opacity: 0.8 }]}>
+                  <Text style={styles.indicatorNumber}>{potentialCounts[selectedMode]}</Text>
+                  <Text style={styles.indicatorLabel}>Previstos</Text>
+                </View>
+              </View>
+
+              <View style={styles.recentAccessSection}>
+                <ThemedText style={styles.subsectionTitle}>
+                  {selectedMode === 'registro' ? 'Últimos registros' : 'Últimos accesos'}
+                </ThemedText>
+
+                {recentLogs.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyIcon}>📋</Text>
+                    <ThemedText style={styles.emptyText}>
+                      {selectedMode === 'registro'
+                        ? 'Aún no hay registros'
+                        : 'Aún no hay accesos registrados'}
                     </ThemedText>
                   </View>
-                </View>
-              ))}
+                ) : (
+                  <View style={styles.logsContainer}>
+                    {recentLogs.map((log, index) => (
+                      <View
+                        key={`${log.dni}-${log.timestamp}-${index}`}
+                        style={[
+                          styles.logCard,
+                          colorScheme === 'dark' ? Shadows.light : Shadows.light,
+                          {
+                            backgroundColor:
+                              colorScheme === 'dark'
+                                ? Colors.dark.cardBackground
+                                : Colors.light.cardBackground,
+                          },
+                        ]}
+                      >
+                        <View style={styles.logInfo}>
+                          <ThemedText style={styles.logName}>{log.nombre}</ThemedText>
+                          <ThemedText style={styles.logDni}>DNI: {log.dni}</ThemedText>
+                          {log.email && (
+                            <ThemedText style={styles.logDetail}>📧 {log.email}</ThemedText>
+                          )}
+                          {log.telefono && (
+                            <ThemedText style={styles.logDetail}>📞 {log.telefono}</ThemedText>
+                          )}
+                          {log.escuela && (
+                            <ThemedText style={styles.logDetail}>🏫 {log.escuela}</ThemedText>
+                          )}
+                          {log.cargo && (
+                            <ThemedText style={styles.logDetail}>💼 {log.cargo}</ThemedText>
+                          )}
+                          {log.permisos && (
+                            <View style={styles.logPermisosRow}>
+                              {log.permisos.master_class && (
+                                <View style={[styles.logPermisoBadge, { backgroundColor: Colors.light.modeMasterClass }]}>
+                                  <Text style={styles.logPermisoText}>MC</Text>
+                                </View>
+                              )}
+                              {log.permisos.cena && (
+                                <View style={[styles.logPermisoBadge, { backgroundColor: Colors.light.modeCena }]}>
+                                  <Text style={styles.logPermisoText}>Cena</Text>
+                                </View>
+                              )}
+                              {log.haPagado && (
+                                <View style={[styles.logPermisoBadge, { backgroundColor: Colors.light.success }]}>
+                                  <Text style={styles.logPermisoText}>✓ Pagado</Text>
+                                </View>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                        <View style={styles.logMeta}>
+                          {log.direccion && (
+                            <View style={[
+                              styles.logDirectionBadge,
+                              { backgroundColor: log.direccion === 'entrada'
+                                ? Colors.light.directionEntrada
+                                : Colors.light.directionSalida
+                              }
+                            ]}>
+                              <Text style={styles.logDirectionText}>
+                                {log.direccion === 'entrada' ? '⬇️' : '⬆️'}
+                              </Text>
+                            </View>
+                          )}
+                          <ThemedText style={styles.logTime}>
+                            {new Date(log.timestamp).toLocaleTimeString('es-ES', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
             </View>
-          )}
-        </View>
-      </View>
+          </>
+        )}
     </ScrollView>
     <View style={styles.footer}>
         <BackButton style={{ margin: 0 }} />
@@ -1297,5 +1547,121 @@ const styles = StyleSheet.create({
   eventSelectorBackText: {
     fontSize: FontSizes.md,
     fontWeight: '600',
+  },
+  // ==================== ESTILOS WEB ====================
+  // Layout de dos columnas para web
+  webTwoColumnContainer: {
+    flexDirection: 'row',
+    flex: 1,
+    gap: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+  },
+  webLeftColumn: {
+    flex: 2,
+    minWidth: 320,
+  },
+  webRightColumn: {
+    flex: 3,
+    minWidth: 400,
+  },
+  // Selector de modo siempre visible en web (vertical)
+  modeSelectorWeb: {
+    flexDirection: 'column',
+    gap: Spacing.xs,
+    marginBottom: Spacing.md,
+  },
+  modeButtonWeb: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
+  // Botones de dirección deshabilitados
+  directionButtonDisabled: {
+    opacity: 0.4,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  directionButtonTextDisabled: {
+    opacity: 0.5,
+  },
+  // Contenedor de cámara inline
+  inlineCameraContainer: {
+    marginTop: Spacing.md,
+    paddingHorizontal: Spacing.md,
+  },
+  // Sección de logs para web
+  webLogsSection: {
+    flex: 1,
+    paddingHorizontal: Spacing.md,
+    marginTop: Spacing.md,
+  },
+  webSubsectionTitle: {
+    fontSize: FontSizes.lg,
+    fontWeight: 'bold',
+    marginBottom: Spacing.sm,
+    color: '#000',
+  },
+  webLogsScrollContainer: {
+    flex: 1,
+    maxHeight: 400,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  // Estilos de tabla para web
+  webTableHeader: {
+    flexDirection: 'row',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  webTableHeaderCell: {
+    fontWeight: 'bold',
+    fontSize: FontSizes.sm,
+    color: '#333',
+  },
+  webTableRow: {
+    flexDirection: 'row',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
+    alignItems: 'center',
+  },
+  webTableCell: {
+    fontSize: FontSizes.sm,
+    color: '#000',
+  },
+  // Anchos de columnas de tabla
+  webTableCellNombre: {
+    flex: 2,
+    minWidth: 120,
+  },
+  webTableCellDni: {
+    flex: 1,
+    minWidth: 80,
+  },
+  webTableCellEmail: {
+    flex: 2,
+    minWidth: 140,
+  },
+  webTableCellEntidad: {
+    flex: 1.5,
+    minWidth: 100,
+  },
+  webTableCellCargo: {
+    flex: 1,
+    minWidth: 80,
+  },
+  webTableCellDir: {
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  webTableCellHora: {
+    width: 50,
+    textAlign: 'right',
   },
 });
