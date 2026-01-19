@@ -900,12 +900,20 @@ export async function exportDataToExcel(eventId?: string): Promise<string> {
     const logsSnapshot = await getDocs(logsQuery);
     const logs = logsSnapshot.docs.map((doc) => doc.data() as AccessLog);
 
-    // Prepare participants data for Excel
+    // Prepare participants data for Excel (matching input format + app fields)
     const participantsData = participants.map((p) => ({
-      DNI: p.dni,
+      // Original input format fields
       Nombre: p.nombre,
-      'Permiso MasterClass': p.permisos.master_class ? 'Si' : 'No',
-      'Permiso Cena': p.permisos.cena ? 'Si' : 'No',
+      DNI: p.dni,
+      "Tipus d'Escola": p.escuela || '',
+      'Lloc/Responsabilitat': p.cargo || '',
+      Mail: p.email || '',
+      Telèfon: p.telefono || '',
+      Acceso: p.acceso || '',
+      Master_Class: p.permisos.master_class ? 'Si' : 'No',
+      Cena: p.permisos.cena ? 'Si' : 'No',
+      'Ha Pagat?': p.haPagado ? 'Si' : 'No',
+      // App-specific status fields
       Registrado: p.estado.registrado ? 'Si' : 'No',
       'En Aula Magna': p.estado.en_aula_magna ? 'Si' : 'No',
       'En Master Class': p.estado.en_master_class ? 'Si' : 'No',
