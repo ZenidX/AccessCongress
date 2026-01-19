@@ -5,8 +5,8 @@
  * Shows the camera preview inline with QR scanning capability.
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Pressable } from 'react-native';
 import { CameraView, Camera } from 'expo-camera';
 import { Colors, BorderRadius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -40,6 +40,14 @@ export function InlineCameraScanner({ onScanResult }: InlineCameraScannerProps) 
     participant?: Participant;
   } | null>(null);
 
+  // Camera controls for web
+  const cameraRef = useRef<CameraView>(null);
+  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number; visible: boolean }>({
+    x: 0,
+    y: 0,
+    visible: false,
+  });
+
   // Request camera permissions
   useEffect(() => {
     (async () => {
@@ -58,6 +66,44 @@ export function InlineCameraScanner({ onScanResult }: InlineCameraScannerProps) 
       return () => clearTimeout(timer);
     }
   }, [lastResult]);
+
+  /**
+   * Tap to focus handler for web
+   */
+  const handleTapToFocus = async (event: { nativeEvent: { locationX: number; locationY: number } }) => {
+    const { locationX, locationY } = event.nativeEvent;
+
+    // Show focus indicator
+    setFocusPoint({ x: locationX, y: locationY, visible: true });
+
+    // Hide after 1 second
+    setTimeout(() => {
+      setFocusPoint(prev => ({ ...prev, visible: false }));
+    }, 1000);
+
+    // Try to trigger refocus on web
+    if (Platform.OS === 'web') {
+      try {
+        const videoElements = document.querySelectorAll('video');
+        for (const video of videoElements) {
+          const stream = video.srcObject as MediaStream;
+          if (stream) {
+            const track = stream.getVideoTracks()[0];
+            if (track) {
+              const capabilities = track.getCapabilities?.() as MediaTrackCapabilities & { focusMode?: string[] };
+              if (capabilities?.focusMode?.includes('continuous') || capabilities?.focusMode?.includes('single-shot')) {
+                await track.applyConstraints({
+                  advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet]
+                });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // Focus control not available
+      }
+    }
+  };
 
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     if (scanned || processing) return;
@@ -220,41 +266,61 @@ export function InlineCameraScanner({ onScanResult }: InlineCameraScannerProps) 
 
   return (
     <View style={styles.container}>
-      <CameraView
-        style={styles.camera}
-        facing="back"
-        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-      >
-        {/* Scan overlay */}
-        <View style={styles.overlay}>
-          <View style={styles.scanArea}>
-            <View style={[styles.corner, styles.topLeft]} />
-            <View style={[styles.corner, styles.topRight]} />
-            <View style={[styles.corner, styles.bottomLeft]} />
-            <View style={[styles.corner, styles.bottomRight]} />
-          </View>
-        </View>
+      <Pressable style={styles.cameraContainer} onPress={handleTapToFocus}>
+        <CameraView
+          ref={cameraRef}
+          style={styles.camera}
+          facing="back"
+          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+        >
+          {/* Scan overlay */}
+          <View style={styles.overlay}>
+            <View style={styles.scanArea}>
+              <View style={[styles.corner, styles.topLeft]} />
+              <View style={[styles.corner, styles.topRight]} />
+              <View style={[styles.corner, styles.bottomLeft]} />
+              <View style={[styles.corner, styles.bottomRight]} />
+            </View>
 
-        {/* Result overlay */}
-        {lastResult && (
-          <TouchableOpacity
-            style={[
-              styles.resultOverlay,
-              { backgroundColor: lastResult.success ? 'rgba(76, 175, 80, 0.95)' : 'rgba(244, 67, 54, 0.95)' },
-            ]}
-            onPress={handleClearResult}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.resultIcon}>{lastResult.success ? '✅' : '❌'}</Text>
-            <Text style={styles.resultMessage}>{lastResult.message}</Text>
-            {lastResult.participant && (
-              <Text style={styles.resultParticipant}>{lastResult.participant.nombre}</Text>
+            {/* Focus indicator */}
+            {focusPoint.visible && (
+              <View
+                style={[
+                  styles.focusIndicator,
+                  { left: focusPoint.x - 25, top: focusPoint.y - 25 },
+                ]}
+              />
             )}
-            <Text style={styles.resultHint}>Toca para continuar</Text>
-          </TouchableOpacity>
-        )}
-      </CameraView>
+
+            {/* Web focus hint */}
+            {Platform.OS === 'web' && !lastResult && (
+              <View style={styles.focusHintContainer}>
+                <Text style={styles.focusHintText}>Toca para enfocar</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Result overlay */}
+          {lastResult && (
+            <TouchableOpacity
+              style={[
+                styles.resultOverlay,
+                { backgroundColor: lastResult.success ? 'rgba(76, 175, 80, 0.95)' : 'rgba(244, 67, 54, 0.95)' },
+              ]}
+              onPress={handleClearResult}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.resultIcon}>{lastResult.success ? '✅' : '❌'}</Text>
+              <Text style={styles.resultMessage}>{lastResult.message}</Text>
+              {lastResult.participant && (
+                <Text style={styles.resultParticipant}>{lastResult.participant.nombre}</Text>
+              )}
+              <Text style={styles.resultHint}>Toca para continuar</Text>
+            </TouchableOpacity>
+          )}
+        </CameraView>
+      </Pressable>
 
       {/* Processing indicator */}
       {processing && (
@@ -273,6 +339,9 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg,
     overflow: 'hidden',
     minHeight: 300,
+  },
+  cameraContainer: {
+    flex: 1,
   },
   camera: {
     flex: 1,
@@ -316,6 +385,28 @@ const styles = StyleSheet.create({
     right: 0,
     borderBottomWidth: 4,
     borderRightWidth: 4,
+  },
+  focusIndicator: {
+    position: 'absolute',
+    width: 50,
+    height: 50,
+    borderWidth: 2,
+    borderColor: Colors.light.primary,
+    borderRadius: 25,
+    backgroundColor: 'transparent',
+  },
+  focusHintContainer: {
+    position: 'absolute',
+    bottom: 10,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+  },
+  focusHintText: {
+    color: '#fff',
+    fontSize: 11,
+    opacity: 0.9,
   },
   messageContainer: {
     flex: 1,

@@ -3,15 +3,99 @@
  *
  * Esta función usa el Admin SDK para eliminar usuarios de Firebase Auth,
  * algo que no es posible hacer desde el cliente SDK.
+ *
+ * IMPORTANTE: Cuando se elimina un admin_responsable, se eliminan en cascada:
+ * - Todos los eventos de su organización
+ * - Todos los usuarios (admins, controladores) de su organización
+ * - Todos los participantes de los eventos eliminados
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 
 const USERS_COLLECTION = 'users';
+const EVENTS_COLLECTION = 'events';
+const PARTICIPANTS_COLLECTION = 'participants';
 
 // Roles que pueden eliminar usuarios
 const ADMIN_ROLES = ['super_admin', 'admin_responsable', 'admin'];
+
+/**
+ * Elimina en cascada todos los datos de una organización
+ * @param db Firestore instance
+ * @param organizationId ID de la organización (UID del admin_responsable)
+ * @returns Estadísticas de lo eliminado
+ */
+async function deleteOrganizationCascade(
+  db: admin.firestore.Firestore,
+  organizationId: string
+): Promise<{ events: number; participants: number; users: number }> {
+  const stats = { events: 0, participants: 0, users: 0 };
+
+  // 1. Obtener todos los eventos de la organización
+  const eventsSnapshot = await db
+    .collection(EVENTS_COLLECTION)
+    .where('organizationId', '==', organizationId)
+    .get();
+
+  // 2. Para cada evento, eliminar sus participantes
+  for (const eventDoc of eventsSnapshot.docs) {
+    const eventId = eventDoc.id;
+
+    // Eliminar participantes del evento
+    const participantsSnapshot = await db
+      .collection(EVENTS_COLLECTION)
+      .doc(eventId)
+      .collection(PARTICIPANTS_COLLECTION)
+      .get();
+
+    const participantsBatch = db.batch();
+    participantsSnapshot.docs.forEach((doc) => {
+      participantsBatch.delete(doc.ref);
+      stats.participants++;
+    });
+
+    if (participantsSnapshot.size > 0) {
+      await participantsBatch.commit();
+    }
+
+    // Eliminar el evento
+    await eventDoc.ref.delete();
+    stats.events++;
+    console.log(`🗑️ Evento eliminado: ${eventId} (${participantsSnapshot.size} participantes)`);
+  }
+
+  // 3. Obtener todos los usuarios de la organización (excepto el admin_responsable)
+  const usersSnapshot = await db
+    .collection(USERS_COLLECTION)
+    .where('organizationId', '==', organizationId)
+    .get();
+
+  // 4. Eliminar usuarios de Auth y Firestore
+  for (const userDoc of usersSnapshot.docs) {
+    // No eliminar el admin_responsable aquí (se elimina después)
+    if (userDoc.id === organizationId) continue;
+
+    const userData = userDoc.data();
+
+    // Eliminar de Firebase Auth
+    try {
+      await admin.auth().deleteUser(userDoc.id);
+      console.log(`🗑️ Usuario eliminado de Auth: ${userData.email}`);
+    } catch (authError: any) {
+      if (authError.code !== 'auth/user-not-found') {
+        console.error(`⚠️ Error eliminando ${userData.email} de Auth:`, authError.message);
+      }
+    }
+
+    // Eliminar de Firestore
+    await userDoc.ref.delete();
+    stats.users++;
+    console.log(`🗑️ Usuario eliminado de Firestore: ${userData.email}`);
+  }
+
+  return stats;
+}
 
 export const deleteUser = onCall(
   {
@@ -79,7 +163,19 @@ export const deleteUser = onCall(
         }
       }
 
-      // 7. Eliminar de Firebase Auth
+      // 7. Si es admin_responsable, eliminar en cascada toda su organización
+      let cascadeStats = { events: 0, participants: 0, users: 0 };
+
+      if (targetRole === 'admin_responsable') {
+        const organizationId = targetData?.organizationId || targetUid;
+        console.log(`🏢 Eliminando organización ${organizationId} en cascada...`);
+
+        cascadeStats = await deleteOrganizationCascade(db, organizationId);
+
+        console.log(`📊 Cascada completada: ${cascadeStats.events} eventos, ${cascadeStats.participants} participantes, ${cascadeStats.users} usuarios`);
+      }
+
+      // 8. Eliminar de Firebase Auth
       try {
         await admin.auth().deleteUser(targetUid);
         console.log(`✅ Usuario ${targetUid} eliminado de Auth`);
@@ -92,16 +188,30 @@ export const deleteUser = onCall(
         }
       }
 
-      // 8. Eliminar de Firestore
+      // 9. Eliminar de Firestore
       if (targetDoc.exists) {
         await db.collection(USERS_COLLECTION).doc(targetUid).delete();
         console.log(`✅ Usuario ${targetUid} eliminado de Firestore`);
       }
 
+      // 10. Construir mensaje de respuesta
+      let message = `Usuario ${targetEmail} eliminado correctamente`;
+      if (targetRole === 'admin_responsable') {
+        const parts = [];
+        if (cascadeStats.events > 0) parts.push(`${cascadeStats.events} evento(s)`);
+        if (cascadeStats.participants > 0) parts.push(`${cascadeStats.participants} participante(s)`);
+        if (cascadeStats.users > 0) parts.push(`${cascadeStats.users} usuario(s)`);
+
+        if (parts.length > 0) {
+          message += `. También se eliminaron: ${parts.join(', ')}`;
+        }
+      }
+
       return {
         success: true,
-        message: `Usuario ${targetEmail} eliminado correctamente`,
+        message,
         deletedUid: targetUid,
+        cascade: targetRole === 'admin_responsable' ? cascadeStats : undefined,
       };
 
     } catch (error: any) {

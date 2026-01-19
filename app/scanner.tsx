@@ -23,8 +23,8 @@
  * 9. Muestra resultado visual al operador (modal de éxito/error)
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Platform, Pressable } from 'react-native';
 import { CameraView, Camera } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed/themed-view';
@@ -63,6 +63,16 @@ export default function ScannerScreen() {
   const [scanned, setScanned] = useState(false);
   const [processing, setProcessing] = useState(false);
 
+  // Referencia a la cámara
+  const cameraRef = useRef<CameraView>(null);
+
+  // Estado para mostrar indicador de enfoque al tocar
+  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number; visible: boolean }>({
+    x: 0,
+    y: 0,
+    visible: false,
+  });
+
   // Estado del modal de resultado (éxito/error)
   const [resultModal, setResultModal] = useState<{
     visible: boolean;
@@ -85,6 +95,51 @@ export default function ScannerScreen() {
       setHasPermission(status === 'granted');
     })();
   }, []);
+
+  /**
+   * Maneja el tap para enfocar en web
+   * En dispositivos nativos el autofocus funciona bien, pero en web
+   * necesitamos dar feedback visual y intentar re-enfocar
+   */
+  const handleTapToFocus = async (event: { nativeEvent: { locationX: number; locationY: number } }) => {
+    const { locationX, locationY } = event.nativeEvent;
+
+    // Mostrar indicador visual de enfoque
+    setFocusPoint({ x: locationX, y: locationY, visible: true });
+
+    // Ocultar indicador después de 1 segundo
+    setTimeout(() => {
+      setFocusPoint(prev => ({ ...prev, visible: false }));
+    }, 1000);
+
+    // En web, intentamos forzar un re-enfoque manipulando el stream
+    if (Platform.OS === 'web') {
+      try {
+        // Obtener el stream de video actual
+        const videoElements = document.querySelectorAll('video');
+        for (const video of videoElements) {
+          const stream = video.srcObject as MediaStream;
+          if (stream) {
+            const track = stream.getVideoTracks()[0];
+            if (track) {
+              const capabilities = track.getCapabilities?.() as MediaTrackCapabilities & { focusMode?: string[] };
+
+              // Verificar si soporta control de enfoque
+              if (capabilities?.focusMode?.includes('continuous') || capabilities?.focusMode?.includes('single-shot')) {
+                // Intentar enfocar
+                await track.applyConstraints({
+                  advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet]
+                });
+                console.log('📷 Enfoque activado');
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.log('📷 Control de enfoque no disponible en este navegador:', error);
+      }
+    }
+  };
 
   /**
    * Maneja el escaneo de un código QR
@@ -387,33 +442,48 @@ export default function ScannerScreen() {
       </View>
 
       {/* Cámara para escanear QR */}
-      <CameraView
-        style={styles.camera}
-        facing="back"
-        // Solo permitir escaneo si no hay uno en proceso
-        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barcodeScannerSettings={{
-          barcodeTypes: ['qr'], // Solo QR codes, no barcodes lineales
-        }}
-      >
-        {/* Overlay con marco de escaneo */}
-        <View style={styles.overlay}>
-          {/* Marco de escaneo con esquinas en azul Impuls */}
-          <View style={styles.scanArea}>
-            <View style={[styles.corner, styles.topLeft]} />
-            <View style={[styles.corner, styles.topRight]} />
-            <View style={[styles.corner, styles.bottomLeft]} />
-            <View style={[styles.corner, styles.bottomRight]} />
-          </View>
+      <Pressable style={styles.cameraContainer} onPress={handleTapToFocus}>
+        <CameraView
+          ref={cameraRef}
+          style={styles.camera}
+          facing="back"
+          // Solo permitir escaneo si no hay uno en proceso
+          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+          barcodeScannerSettings={{
+            barcodeTypes: ['qr'], // Solo QR codes, no barcodes lineales
+          }}
+        >
+          {/* Overlay con marco de escaneo */}
+          <View style={styles.overlay}>
+            {/* Marco de escaneo con esquinas en azul Impuls */}
+            <View style={styles.scanArea}>
+              <View style={[styles.corner, styles.topLeft]} />
+              <View style={[styles.corner, styles.topRight]} />
+              <View style={[styles.corner, styles.bottomLeft]} />
+              <View style={[styles.corner, styles.bottomRight]} />
+            </View>
 
-          {/* Instrucciones para el operador */}
-          <View style={styles.instructionsContainer}>
-            <Text style={styles.instructions}>
-              Coloca el código QR dentro del marco
-            </Text>
+            {/* Indicador de enfoque (aparece al tocar) */}
+            {focusPoint.visible && (
+              <View
+                style={[
+                  styles.focusIndicator,
+                  { left: focusPoint.x - 30, top: focusPoint.y - 30 },
+                ]}
+              />
+            )}
+
+            {/* Instrucciones para el operador */}
+            <View style={styles.instructionsContainer}>
+              <Text style={styles.instructions}>
+                {Platform.OS === 'web'
+                  ? 'Toca la pantalla para enfocar'
+                  : 'Coloca el código QR dentro del marco'}
+              </Text>
+            </View>
           </View>
-        </View>
-      </CameraView>
+        </CameraView>
+      </Pressable>
 
       {/* Footer: botón para volver a la pantalla anterior */}
       <View style={styles.footer}>
@@ -486,6 +556,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000', // Fondo negro para mejor contraste con la cámara
+  },
+  cameraContainer: {
+    flex: 1,
   },
   header: {
     backgroundColor: 'rgba(0,0,0,0.8)',
@@ -562,6 +635,15 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     textAlign: 'center',
+  },
+  focusIndicator: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderWidth: 2,
+    borderColor: Colors.light.primary,
+    borderRadius: 30,
+    backgroundColor: 'transparent',
   },
   footer: {
     backgroundColor: 'rgba(0,0,0,0.8)',

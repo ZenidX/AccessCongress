@@ -241,13 +241,27 @@ export function UsersSection() {
       return;
     }
 
+    // Mensaje de confirmación especial para admin_responsable
+    const isAdminResponsable = targetUser.role === 'admin_responsable';
+    const confirmTitle = isAdminResponsable
+      ? '⚠️ Eliminar Organización Completa'
+      : 'Eliminar usuario';
+    const confirmMessage = isAdminResponsable
+      ? `¿Estás seguro de que quieres eliminar a ${targetUser.email}?\n\n` +
+        '⚠️ ADVERTENCIA: Esto eliminará TODA su organización:\n' +
+        '• Todos los eventos\n' +
+        '• Todos los participantes\n' +
+        '• Todos los administradores y controladores\n\n' +
+        'Esta acción NO se puede deshacer.'
+      : `¿Estás seguro de que quieres eliminar a ${targetUser.email}?`;
+
     // Confirmación según plataforma
     const confirmed = Platform.OS === 'web'
-      ? window.confirm(`¿Estás seguro de que quieres eliminar a ${targetUser.email}?`)
+      ? window.confirm(confirmMessage)
       : await new Promise<boolean>((resolve) => {
           Alert.alert(
-            'Eliminar usuario',
-            `¿Estás seguro de que quieres eliminar a ${targetUser.email}?`,
+            confirmTitle,
+            confirmMessage,
             [
               { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
               { text: 'Eliminar', style: 'destructive', onPress: () => resolve(true) },
@@ -259,7 +273,7 @@ export function UsersSection() {
 
     try {
       setLoading(true);
-      await deleteUserFromFirestore(targetUser.uid);
+      const resultMessage = await deleteUserFromFirestore(targetUser.uid);
       setLoading(false);
 
       if (selectedAdminResponsable?.uid === targetUser.uid) {
@@ -272,10 +286,15 @@ export function UsersSection() {
 
       await loadUsers();
 
+      // Mostrar mensaje con detalles de lo eliminado
+      const title = targetUser.role === 'admin_responsable'
+        ? 'Organización eliminada'
+        : 'Usuario eliminado';
+
       if (Platform.OS === 'web') {
-        window.alert(`${targetUser.email} ha sido eliminado.`);
+        window.alert(resultMessage);
       } else {
-        Alert.alert('Usuario eliminado', `${targetUser.email} ha sido eliminado.`);
+        Alert.alert(title, resultMessage);
       }
     } catch (error: any) {
       setLoading(false);

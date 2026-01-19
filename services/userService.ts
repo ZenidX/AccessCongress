@@ -295,8 +295,7 @@ export async function getUserData(uid: string): Promise<User | null> {
 
 /**
  * Update user role
- * NOTE: Custom Claims will be auto-synced by Cloud Function trigger.
- * If updating the current user, call refreshCurrentUserToken() after this.
+ * Uses Cloud Function to handle special cases like admin_responsable promotion.
  */
 export async function updateUserRole(uid: string, role: UserRole): Promise<void> {
   try {
@@ -305,20 +304,30 @@ export async function updateUserRole(uid: string, role: UserRole): Promise<void>
       throw new Error('No se puede asignar el rol de super administrador');
     }
 
-    const userRef = doc(db, USERS_COLLECTION, uid);
-    await updateDoc(userRef, {
-      role,
-      updatedAt: Date.now(),
+    const updateRoleFn = httpsCallable<
+      { targetUid: string; newRole: UserRole },
+      { success: boolean; message: string; newOrganizationId: string | null; assignedEventsCount: number }
+    >(functions, 'updateUserRole');
+
+    const result = await updateRoleFn({
+      targetUid: uid,
+      newRole: role,
     });
+
+    if (!result.data.success) {
+      throw new Error(result.data.message || 'Error al actualizar rol');
+    }
+
+    console.log('Rol actualizado:', result.data.message);
 
     // If updating the current user, refresh their token
     if (auth.currentUser?.uid === uid) {
-      // Small delay to allow the Cloud Function trigger to run
-      setTimeout(() => refreshCurrentUserToken(), 1500);
+      await refreshCurrentUserToken();
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error updating role:', error);
-    throw new Error('No se pudo actualizar el rol del usuario');
+    const message = error.message || error.details || 'No se pudo actualizar el rol del usuario';
+    throw new Error(message);
   }
 }
 
@@ -453,13 +462,19 @@ export async function getUsersAssignedToEvent(eventId: string): Promise<User[]> 
  * Uses a Cloud Function with Admin SDK to delete the user from:
  * 1. Firebase Auth (requires Admin SDK)
  * 2. Firestore users collection
+ *
+ * For admin_responsable: Also deletes all events, participants, and users in their organization
  */
-export async function deleteUserFromFirestore(uid: string): Promise<void> {
+export async function deleteUserFromFirestore(uid: string): Promise<string> {
   try {
-    const deleteUserFn = httpsCallable<{ targetUid: string }, { success: boolean; message: string }>(
-      functions,
-      'deleteUser'
-    );
+    const deleteUserFn = httpsCallable<
+      { targetUid: string },
+      {
+        success: boolean;
+        message: string;
+        cascade?: { events: number; participants: number; users: number };
+      }
+    >(functions, 'deleteUser');
 
     const result = await deleteUserFn({ targetUid: uid });
 
@@ -468,6 +483,7 @@ export async function deleteUserFromFirestore(uid: string): Promise<void> {
     }
 
     console.log('Usuario eliminado:', result.data.message);
+    return result.data.message;
   } catch (error: any) {
     console.error('Error deleting user:', error);
 
