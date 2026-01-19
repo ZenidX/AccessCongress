@@ -270,8 +270,8 @@ export function LoginButton() {
             {/* Credenciales de prueba */}
             <View style={styles.credentialsInfo}>
               <Text style={styles.credentialsTitle}>Credenciales de prueba:</Text>
-              <Text style={styles.credentialsText}>Admin: admin@impuls.org / admin123</Text>
-              <Text style={styles.credentialsText}>Control: control@impuls.org / control123</Text>
+              <Text style={styles.credentialsText}>Admin: Admin@impulseducacio.org / Admin123</Text>
+              <Text style={styles.credentialsText}>Control: Control@impulseducacio.org / Control123</Text>
             </View>
           </View>
         </View>
