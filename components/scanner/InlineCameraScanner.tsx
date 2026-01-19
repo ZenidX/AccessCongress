@@ -56,16 +56,8 @@ export function InlineCameraScanner({ onScanResult }: InlineCameraScannerProps) 
     })();
   }, []);
 
-  // Auto-clear result after 3 seconds for success
-  useEffect(() => {
-    if (lastResult?.success) {
-      const timer = setTimeout(() => {
-        setLastResult(null);
-        setScanned(false);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [lastResult]);
+  // No auto-clear: siempre requiere toque del usuario para continuar
+  // Esto evita logs duplicados si el QR sigue visible
 
   /**
    * Tap to focus handler for web

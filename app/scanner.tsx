@@ -350,8 +350,7 @@ export default function ScannerScreen() {
 
   /**
    * Muestra el modal de resultado (éxito o error)
-   * Si es exitoso, se auto-cierra después de 3 segundos
-   * Si es error, requiere confirmación manual del operador
+   * Siempre requiere toque del usuario para continuar (evita logs duplicados)
    */
   const showResult = (
     success: boolean,
@@ -364,14 +363,6 @@ export default function ScannerScreen() {
       message,
       participant,
     });
-
-    // Auto-cerrar después de 3 segundos solo si es exitoso
-    // Esto permite al operador escanear rápidamente múltiples participantes
-    if (success) {
-      setTimeout(() => {
-        closeResultModal();
-      }, 3000);
-    }
   };
 
   /**
