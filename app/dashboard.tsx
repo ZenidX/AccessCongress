@@ -24,6 +24,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedView } from '@/components/themed/themed-view';
 import { ThemedText } from '@/components/themed/themed-text';
 import {
@@ -85,6 +86,7 @@ const LOCATIONS: LocationInfo[] = [
 export default function DashboardScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
+  const insets = useSafeAreaInsets();
   const { isWideScreen } = useResponsiveLayout();
   const isWeb = Platform.OS === 'web';
 
@@ -1052,7 +1054,7 @@ export default function DashboardScreen() {
             </View>
           </ScrollView>
         )}
-    <View style={styles.footer}>
+    <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md }]}>
         <BackButton style={{ margin: 0 }} />
     </View>
   </ThemedView>

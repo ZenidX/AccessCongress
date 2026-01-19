@@ -22,7 +22,6 @@ import {
   Platform,
   TextInput,
   Modal,
-  useWindowDimensions,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
@@ -43,6 +42,7 @@ import { Participant } from '@/types/participant';
 import { Event } from '@/types/event';
 import { Colors, BorderRadius, Spacing, Shadows, FontSizes } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { useEvent } from '@/contexts/EventContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getEventsByOrganization, getAllEvents } from '@/services/eventService';
@@ -55,8 +55,7 @@ export function ParticipantsSection() {
   const { user, isSuperAdmin } = useAuth();
 
   // Responsive layout
-  const { width } = useWindowDimensions();
-  const isWideScreen = width >= 900;
+  const { isWideScreen, isMobile, deviceType } = useResponsiveLayout();
 
   // State
   const [loading, setLoading] = useState(false);

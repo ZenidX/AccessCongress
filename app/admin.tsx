@@ -20,6 +20,7 @@ import {
   Alert,
   TouchableOpacity,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedView } from '@/components/themed/themed-view';
 import { Colors, BorderRadius, Spacing, Shadows, FontSizes } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -45,6 +46,7 @@ import { Event, ResetType } from '@/types/event';
 export default function AdminScreen() {
   const colorScheme = useColorScheme();
   const { isMobile } = useResponsiveLayout();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { currentEvent, setCurrentEvent, refreshEvents } = useEvent();
 
@@ -245,7 +247,7 @@ export default function AdminScreen() {
           </ScrollView>
 
           {/* Footer para el botón de volver */}
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md }]}>
             <BackButton style={{ margin: 0, width: '100%' }} />
           </View>
         </View>

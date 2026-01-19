@@ -6,30 +6,43 @@
  * - Administración: Gestión de participantes y configuración
  */
 
+import { LoginButton } from '@/components/forms/LoginButton';
+import { ThemedText } from '@/components/themed/themed-text';
+import { ThemedView } from '@/components/themed/themed-view';
+import { ImpulsWave } from '@/components/visuals/wave-divider';
+import { BorderRadius, Colors, Shadows, Spacing } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
+import { useRouter } from 'expo-router';
 import React from 'react';
 import {
-  View,
+  Image,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  Image,
+  View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ThemedView } from '@/components/themed/themed-view';
-import { ThemedText } from '@/components/themed/themed-text';
-import { Colors, BorderRadius, Shadows, Spacing } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { ImpulsWave } from '@/components/visuals/wave-divider';
-import { LoginButton } from '@/components/forms/LoginButton';
-import { useAuth } from '@/contexts/AuthContext';
 
 export default function HomeScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
+  const { isMobile, isWideScreen, getResponsiveValue } = useResponsiveLayout();
   const { user } = useAuth();
 
   // Debug: mostrar el usuario actual
   console.log('🏠 Index: Usuario actual:', user);
+
+  // Responsive sizes
+  const logoSize = getResponsiveValue(
+    { width: 160, height: 55 },
+    { width: 180, height: 65 },
+    { width: 200, height: 70 }
+  );
+  const titleFontSize = getResponsiveValue(26, 30, 32);
+  const subtitleFontSize = getResponsiveValue(16, 18, 20);
+  const buttonPadding = getResponsiveValue(Spacing.lg, Spacing.xl, Spacing.xxl);
+  const buttonIconSize = getResponsiveValue(48, 56, 64);
 
   /**
    * Navega a la pantalla del Dashboard en tiempo real
@@ -52,11 +65,11 @@ export default function HomeScreen() {
         <View style={styles.headerContent}>
           <Image
             source={{ uri: 'https://impulseducacio.org/wp-content/uploads/2020/02/logo-web-impuls.png' }}
-            style={styles.logo}
+            style={[styles.logo, logoSize]}
             resizeMode="contain"
           />
-          <Text style={styles.titleWhite}>Control de Acceso</Text>
-          <Text style={styles.subtitleWhite}>Congreso 2025</Text>
+          <Text style={[styles.titleWhite, { fontSize: titleFontSize }]}>Control de Acceso</Text>
+          <Text style={[styles.subtitleWhite, { fontSize: subtitleFontSize }]}>Congreso 2025</Text>
         </View>
         <View style={styles.loginContainer}>
           <LoginButton />
@@ -74,11 +87,11 @@ export default function HomeScreen() {
       {/* Contenido principal */}
       <View style={styles.content}>
         <ThemedText style={styles.welcomeText}>
-          Bienvenido al sistema de control de acceso
+          Bienvenido al control de acceso
         </ThemedText>
 
         {/* Botones principales */}
-        <View style={styles.mainButtons}>
+        <View style={[styles.mainButtons, isWideScreen && styles.mainButtonsWide]}>
           {/* Botón Dashboard */}
           <TouchableOpacity
             style={[
@@ -87,12 +100,14 @@ export default function HomeScreen() {
               {
                 backgroundColor:
                   colorScheme === 'dark' ? Colors.dark.primary : Colors.light.primary,
+                padding: buttonPadding,
               },
+              isWideScreen && styles.mainButtonWide,
             ]}
             onPress={handleGoToDashboard}
             activeOpacity={0.8}
           >
-            <Text style={styles.mainButtonIcon}>📊</Text>
+            <Text style={[styles.mainButtonIcon, { fontSize: buttonIconSize }]}>📊</Text>
             <Text style={styles.mainButtonText}>Dashboard</Text>
             <Text style={styles.mainButtonDescription}>
               Monitoreo en tiempo real de asistentes
@@ -107,12 +122,14 @@ export default function HomeScreen() {
                 Shadows.strong,
                 {
                   backgroundColor: colorScheme === 'dark' ? Colors.dark.primary : Colors.light.primary,
+                  padding: buttonPadding,
                 },
+                isWideScreen && styles.mainButtonWide,
               ]}
               onPress={handleGoToAdmin}
               activeOpacity={0.8}
             >
-              <Text style={styles.mainButtonIcon}>⚙️</Text>
+              <Text style={[styles.mainButtonIcon, { fontSize: buttonIconSize }]}>⚙️</Text>
               <Text style={styles.mainButtonText}>Administración</Text>
               <Text style={styles.mainButtonDescription}>
                 Gestión de participantes y configuración
@@ -190,12 +207,23 @@ const styles = StyleSheet.create({
   mainButtons: {
     gap: Spacing.xl,
   },
+  mainButtonsWide: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    maxWidth: 800,
+    alignSelf: 'center',
+    width: '100%',
+  },
   mainButton: {
     padding: Spacing.xxl,
     borderRadius: BorderRadius.lg,
     alignItems: 'center',
     minHeight: 160,
     justifyContent: 'center',
+  },
+  mainButtonWide: {
+    flex: 1,
+    maxWidth: 350,
   },
   mainButtonIcon: {
     fontSize: 64,
