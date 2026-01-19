@@ -431,6 +431,12 @@ export async function importParticipantsFromCSV(
           nombre,
           email: getValueFromRow(row, ['mail', 'email']),
           telefono: getValueFromRow(row, ['telèfon', 'telefon', 'telefono']),
+          entitat: getValueFromRow(row, [
+            'entitat/institució',
+            'entitat',
+            'institució',
+            'institucion',
+          ]),
           escuela: getValueFromRow(row, [
             "tipus d'escola",
             'tipo de escuela',
@@ -595,6 +601,12 @@ export async function importParticipantsFromExcel(
           nombre,
           email: getValueFromRow(row, ['mail', 'email']),
           telefono: getValueFromRow(row, ['telèfon', 'telefon', 'telefono']),
+          entitat: getValueFromRow(row, [
+            'entitat/institució',
+            'entitat',
+            'institució',
+            'institucion',
+          ]),
           escuela: getValueFromRow(row, [
             "tipus d'escola",
             'tipo de escuela',
@@ -905,6 +917,7 @@ export async function exportDataToExcel(eventId?: string): Promise<string> {
       // Original input format fields
       Nombre: p.nombre,
       DNI: p.dni,
+      'Entitat/Institució': p.entitat || '',
       "Tipus d'Escola": p.escuela || '',
       'Lloc/Responsabilitat': p.cargo || '',
       Mail: p.email || '',

@@ -24,6 +24,7 @@ export interface Participant {
   nombre: string;
   email?: string; // MAIL
   telefono?: string; // TELÈFON
+  entitat?: string; // ENTITAT/INSTITUCIÓ
   escuela?: string; // TIPUS D'ESCOLA
   cargo?: string; // LLOC/RESPONSABILITAT
   acceso?: string; // ACCESO (Presencial/Online)
