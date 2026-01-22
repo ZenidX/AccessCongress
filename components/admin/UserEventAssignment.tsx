@@ -1,11 +1,11 @@
 /**
  * UserEventAssignment Component
  *
- * Allows admins to assign/unassign controllers to events.
+ * Allows admins to assign/unassign users (admins and controllers) to events.
  * Features:
- * - List all controllers in the organization
- * - Toggle event assignment for each controller
- * - Show current assignments
+ * - List all admins and controllers in the organization
+ * - Toggle event assignment for each user
+ * - Show current assignments grouped by role
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -14,28 +14,44 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
   Alert,
   ActivityIndicator,
   Switch,
+  SectionList,
 } from 'react-native';
-import { Colors, BorderRadius, Spacing, FontSizes, Shadows } from '@/constants/theme';
+import { Colors, BorderRadius, Spacing, FontSizes } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { Event } from '@/types/event';
-import { User } from '@/types/user';
+import { User, UserRole } from '@/types/user';
 import {
-  getControllersByOrganization,
   getUsersByOrganization,
   addEventToUser,
   removeEventFromUser,
   getUsersAssignedToEvent,
 } from '@/services/userService';
 
+// Role labels and colors
+const ROLE_CONFIG: Record<UserRole, { label: string; color: string; icon: string }> = {
+  super_admin: { label: 'Super Admin', color: '#9c27b0', icon: '👑' },
+  admin_responsable: { label: 'Admin Responsable', color: '#2196f3', icon: '🏢' },
+  admin: { label: 'Administrador', color: '#ff9800', icon: '👔' },
+  controlador: { label: 'Controlador', color: '#4caf50', icon: '📱' },
+};
+
 interface UserEventAssignmentProps {
   event: Event;
   onClose: () => void;
   onAssignmentChange?: () => void;
+}
+
+// Section data type for SectionList
+interface UserSection {
+  title: string;
+  role: UserRole;
+  icon: string;
+  color: string;
+  data: User[];
 }
 
 export function UserEventAssignment({
@@ -47,6 +63,7 @@ export function UserEventAssignment({
   const { user: currentUser, isSuperAdmin } = useAuth();
   const colors = Colors[colorScheme ?? 'light'];
 
+  const [admins, setAdmins] = useState<User[]>([]);
   const [controllers, setControllers] = useState<User[]>([]);
   const [assignedUserIds, setAssignedUserIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -56,21 +73,25 @@ export function UserEventAssignment({
     try {
       setLoading(true);
 
-      // Get controllers for this organization
-      let controllerList: User[];
-      if (isSuperAdmin()) {
-        // Super admin can see all users from the event's organization
-        controllerList = await getControllersByOrganization(event.organizationId);
-      } else if (currentUser?.organizationId) {
-        controllerList = await getControllersByOrganization(currentUser.organizationId);
-      } else {
-        controllerList = [];
+      // Get all users from the organization
+      const orgId = isSuperAdmin() ? event.organizationId : currentUser?.organizationId;
+      if (!orgId) {
+        setAdmins([]);
+        setControllers([]);
+        return;
       }
+
+      const allUsers = await getUsersByOrganization(orgId);
+
+      // Filter by role (exclude admin_responsable - they have full access anyway)
+      const adminList = allUsers.filter((u) => u.role === 'admin');
+      const controllerList = allUsers.filter((u) => u.role === 'controlador');
 
       // Get users already assigned to this event
       const assignedUsers = await getUsersAssignedToEvent(event.id);
       const assignedIds = new Set(assignedUsers.map((u) => u.uid));
 
+      setAdmins(adminList);
       setControllers(controllerList);
       setAssignedUserIds(assignedIds);
     } catch (error) {
@@ -80,6 +101,30 @@ export function UserEventAssignment({
       setLoading(false);
     }
   }, [event.id, event.organizationId, currentUser?.organizationId, isSuperAdmin]);
+
+  // Prepare sections for SectionList
+  const sections: UserSection[] = [
+    ...(admins.length > 0
+      ? [{
+          title: ROLE_CONFIG.admin.label + 's',
+          role: 'admin' as UserRole,
+          icon: ROLE_CONFIG.admin.icon,
+          color: ROLE_CONFIG.admin.color,
+          data: admins,
+        }]
+      : []),
+    ...(controllers.length > 0
+      ? [{
+          title: ROLE_CONFIG.controlador.label + 'es',
+          role: 'controlador' as UserRole,
+          icon: ROLE_CONFIG.controlador.icon,
+          color: ROLE_CONFIG.controlador.color,
+          data: controllers,
+        }]
+      : []),
+  ];
+
+  const totalUsers = admins.length + controllers.length;
 
   useEffect(() => {
     loadData();
@@ -157,13 +202,25 @@ export function UserEventAssignment({
     );
   };
 
+  const renderSectionHeader = ({ section }: { section: UserSection }) => (
+    <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
+      <Text style={styles.sectionIcon}>{section.icon}</Text>
+      <Text style={[styles.sectionTitle, { color: section.color }]}>
+        {section.title}
+      </Text>
+      <View style={[styles.sectionBadge, { backgroundColor: section.color }]}>
+        <Text style={styles.sectionBadgeText}>{section.data.length}</Text>
+      </View>
+    </View>
+  );
+
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.text }]}>
-            Cargando controladores...
+            Cargando usuarios...
           </Text>
         </View>
       </View>
@@ -176,7 +233,7 @@ export function UserEventAssignment({
       <View style={styles.header}>
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.text }]}>
-            Asignar Controladores
+            Usuarios del Evento
           </Text>
           <Text style={[styles.eventName, { color: colors.primary }]}>
             {event.name}
@@ -193,11 +250,20 @@ export function UserEventAssignment({
       {/* Stats */}
       <View style={[styles.stats, { backgroundColor: colors.cardBackground }]}>
         <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: colors.primary }]}>
+          <Text style={[styles.statValue, { color: ROLE_CONFIG.admin.color }]}>
+            {admins.length}
+          </Text>
+          <Text style={[styles.statLabel, { color: colors.text }]}>
+            {ROLE_CONFIG.admin.icon} Admins
+          </Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={[styles.statValue, { color: ROLE_CONFIG.controlador.color }]}>
             {controllers.length}
           </Text>
           <Text style={[styles.statLabel, { color: colors.text }]}>
-            Controladores
+            {ROLE_CONFIG.controlador.icon} Controladores
           </Text>
         </View>
         <View style={styles.statDivider} />
@@ -206,28 +272,30 @@ export function UserEventAssignment({
             {assignedUserIds.size}
           </Text>
           <Text style={[styles.statLabel, { color: colors.text }]}>
-            Asignados
+            ✓ Asignados
           </Text>
         </View>
       </View>
 
-      {/* Controllers list */}
-      {controllers.length === 0 ? (
+      {/* Users list */}
+      {totalUsers === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={[styles.emptyText, { color: colors.text }]}>
-            No hay controladores en esta organización
+            No hay administradores ni controladores
           </Text>
           <Text style={[styles.emptySubtext, { color: colors.text }]}>
-            Crea controladores primero desde la sección de usuarios
+            Crea usuarios primero desde la sección de gestión de usuarios
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={controllers}
+        <SectionList
+          sections={sections}
           renderItem={renderController}
+          renderSectionHeader={renderSectionHeader}
           keyExtractor={(item) => item.uid}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          stickySectionHeadersEnabled={false}
         />
       )}
     </View>
@@ -306,6 +374,35 @@ const styles = StyleSheet.create({
   listContent: {
     padding: Spacing.md,
     paddingBottom: Spacing.xxl,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.xs,
+  },
+  sectionIcon: {
+    fontSize: FontSizes.lg,
+    marginRight: Spacing.xs,
+  },
+  sectionTitle: {
+    fontSize: FontSizes.md,
+    fontWeight: '700',
+    flex: 1,
+  },
+  sectionBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  sectionBadgeText: {
+    color: '#fff',
+    fontSize: FontSizes.xs,
+    fontWeight: '700',
   },
   controllerCard: {
     flexDirection: 'row',
