@@ -49,15 +49,7 @@ import { getEventsByOrganization, getAllEvents } from '@/services/eventService';
 import { getUserData } from '@/services/userService';
 import { User } from '@/types/user';
 
-// Cross-platform alert helpers
-const showAlert = (title: string, message: string) => {
-  if (Platform.OS === 'web') {
-    window.alert(`${title}\n\n${message}`);
-  } else {
-    Alert.alert(title, message);
-  }
-};
-
+// Cross-platform confirm helper
 const showConfirm = async (
   title: string,
   message: string,
@@ -75,6 +67,20 @@ const showConfirm = async (
     ]);
   });
 };
+
+// Result modal types
+type ResultType = 'success' | 'error' | 'warning' | 'info';
+interface ResultModalData {
+  visible: boolean;
+  type: ResultType;
+  title: string;
+  message: string;
+  details?: string[];
+  action?: {
+    label: string;
+    onPress: () => void;
+  };
+}
 
 export function ParticipantsSection() {
   const colorScheme = useColorScheme();
@@ -111,6 +117,44 @@ export function ParticipantsSection() {
 
   // Format info modal state
   const [showFormatInfoModal, setShowFormatInfoModal] = useState(false);
+
+  // Result modal state (unified feedback modal)
+  const [resultModal, setResultModal] = useState<ResultModalData>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+  });
+
+  // Helper to show result modal
+  const showResult = (
+    type: ResultType,
+    title: string,
+    message: string,
+    details?: string[],
+    action?: { label: string; onPress: () => void }
+  ) => {
+    setResultModal({ visible: true, type, title, message, details, action });
+  };
+
+  // Helper to close result modal
+  const closeResultModal = () => {
+    setResultModal(prev => ({ ...prev, visible: false }));
+  };
+
+  // Helper to require event selection
+  const requireEvent = (actionName: string): boolean => {
+    if (!currentEvent) {
+      showResult(
+        'warning',
+        'Evento no seleccionado',
+        `Para ${actionName}, primero debes seleccionar un evento de la lista.`,
+        ['Usa el selector de eventos en la parte superior de esta sección.']
+      );
+      return false;
+    }
+    return true;
+  };
 
   // Load events directly (same logic as EventManager)
   useEffect(() => {
@@ -203,9 +247,17 @@ export function ParticipantsSection() {
     try {
       const data = await getAllParticipants(currentEvent.id);
       setParticipants(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading participants:', error);
-      showAlert('Error', 'No se pudieron cargar los participantes');
+      showResult(
+        'error',
+        'Error al cargar participantes',
+        `No se pudo cargar la lista de participantes del evento "${currentEvent.name}".`,
+        [
+          error.message || 'Error de conexión con la base de datos',
+          'Verifica tu conexión a internet e inténtalo de nuevo.',
+        ]
+      );
     } finally {
       setLoadingParticipants(false);
     }
@@ -215,8 +267,7 @@ export function ParticipantsSection() {
    * Import participants from CSV or Excel file
    */
   const handleImportCSV = async () => {
-    if (!currentEvent) {
-      showAlert('Error', 'Selecciona un evento primero');
+    if (!requireEvent('importar participantes')) {
       return;
     }
 
@@ -251,9 +302,17 @@ export function ParticipantsSection() {
       }
 
       setLoading(false);
-      showAlert(
-        'Importación Completada',
-        `Se ${importMode === 'replace' ? 'reemplazaron' : 'importaron'} ${count} participantes correctamente.`
+      const modeText = importMode === 'replace' ? 'Reemplazo total' : 'Añadidos/actualizados';
+      showResult(
+        'success',
+        'Importación completada',
+        `Se han procesado ${count} participantes correctamente.`,
+        [
+          `📁 Archivo: ${fileName}`,
+          `📊 Modo: ${modeText}`,
+          `📅 Evento: ${currentEvent.name}`,
+          count === 1 ? '👤 1 participante importado' : `👥 ${count} participantes importados`,
+        ]
       );
 
       // Reload participants list
@@ -261,7 +320,23 @@ export function ParticipantsSection() {
     } catch (error: any) {
       console.error('Error importing:', error);
       setLoading(false);
-      showAlert('Error de Importación', error.message || 'Error al procesar el archivo');
+      showResult(
+        'error',
+        'Error de importación',
+        'No se pudo procesar el archivo de participantes.',
+        [
+          error.message || 'Error desconocido al procesar el archivo',
+          'Verifica que el formato del archivo sea correcto.',
+          'Consulta "Ver formatos aceptados" para más información.',
+        ],
+        {
+          label: 'Ver formatos aceptados',
+          onPress: () => {
+            closeResultModal();
+            setShowFormatInfoModal(true);
+          },
+        }
+      );
     }
   };
 
@@ -269,8 +344,7 @@ export function ParticipantsSection() {
    * Export data to Excel
    */
   const handleExportData = async () => {
-    if (!currentEvent) {
-      showAlert('Error', 'Selecciona un evento primero');
+    if (!requireEvent('exportar datos')) {
       return;
     }
 
@@ -280,7 +354,16 @@ export function ParticipantsSection() {
       setLoading(false);
 
       if (Platform.OS === 'web') {
-        showAlert('Exportación Completada', 'El archivo se ha descargado');
+        showResult(
+          'success',
+          'Exportación completada',
+          'El archivo Excel se ha descargado correctamente.',
+          [
+            `📅 Evento: ${currentEvent.name}`,
+            `👥 Participantes: ${participants.length}`,
+            '📄 Incluye: lista de participantes y registro de accesos',
+          ]
+        );
       } else {
         const isAvailable = await Sharing.isAvailableAsync();
         if (isAvailable) {
@@ -289,13 +372,30 @@ export function ParticipantsSection() {
             dialogTitle: 'Exportar datos del evento',
           });
         } else {
-          showAlert('Exportación Completada', `Archivo guardado en: ${fileUri}`);
+          showResult(
+            'success',
+            'Exportación completada',
+            'El archivo Excel se ha guardado correctamente.',
+            [
+              `📁 Ubicación: ${fileUri}`,
+              `📅 Evento: ${currentEvent.name}`,
+            ]
+          );
         }
       }
     } catch (error: any) {
       console.error('Error exporting:', error);
       setLoading(false);
-      showAlert('Error de Exportación', error.message || 'Error al exportar datos');
+      showResult(
+        'error',
+        'Error de exportación',
+        'No se pudieron exportar los datos del evento.',
+        [
+          error.message || 'Error desconocido',
+          'Verifica que haya participantes en el evento.',
+          'Inténtalo de nuevo o contacta soporte.',
+        ]
+      );
     }
   };
 
@@ -304,12 +404,16 @@ export function ParticipantsSection() {
    */
   const handleAddParticipant = async () => {
     if (!newParticipantDNI.trim() || !newParticipantNombre.trim()) {
-      showAlert('Error', 'DNI y Nombre son obligatorios');
+      showResult(
+        'warning',
+        'Campos obligatorios',
+        'Para añadir un participante necesitas completar los campos obligatorios.',
+        ['DNI: identificador único del participante', 'Nombre: nombre completo']
+      );
       return;
     }
 
-    if (!currentEvent) {
-      showAlert('Error', 'Selecciona un evento primero');
+    if (!requireEvent('añadir participantes')) {
       return;
     }
 
@@ -333,16 +437,44 @@ export function ParticipantsSection() {
         },
       }, currentEvent.id);
 
-      showAlert('Éxito', 'Participante añadido correctamente');
+      const addedName = newParticipantNombre;
+      const addedDNI = newParticipantDNI;
+      const addedEmail = newParticipantEmail;
+
       setShowAddParticipantModal(false);
       setNewParticipantDNI('');
       setNewParticipantNombre('');
       setNewParticipantEmail('');
       setNewParticipantTelefono('');
       loadParticipants();
+
+      showResult(
+        'success',
+        'Participante añadido',
+        `${addedName} se ha añadido correctamente al evento.`,
+        [
+          `🆔 DNI: ${addedDNI}`,
+          `📅 Evento: ${currentEvent.name}`,
+          addedEmail ? `📧 Email: ${addedEmail}` : '⚠️ Sin email (no podrá recibir invitación)',
+          '✅ Permiso de Aula Magna activado por defecto',
+        ]
+      );
     } catch (error: any) {
       console.error('Error adding participant:', error);
-      showAlert('Error', error.message || 'No se pudo añadir el participante');
+      const isDuplicate = error.message?.includes('Ya existe');
+      showResult(
+        'error',
+        isDuplicate ? 'Participante duplicado' : 'Error al añadir',
+        isDuplicate
+          ? `Ya existe un participante con el DNI "${newParticipantDNI}" en este evento.`
+          : 'No se pudo añadir el participante al evento.',
+        [
+          error.message || 'Error desconocido',
+          isDuplicate
+            ? 'Si necesitas actualizar sus datos, elimínalo primero y vuelve a añadirlo.'
+            : 'Verifica los datos e inténtalo de nuevo.',
+        ]
+      );
     } finally {
       setLoading(false);
     }
@@ -356,7 +488,7 @@ export function ParticipantsSection() {
 
     const confirmed = await showConfirm(
       'Confirmar eliminación',
-      `¿Estás seguro de eliminar a ${nombre} (${dni})?`,
+      `¿Estás seguro de eliminar a ${nombre} (${dni})?\n\nEsta acción no se puede deshacer.`,
       'Eliminar',
       'Cancelar',
       true
@@ -367,10 +499,23 @@ export function ParticipantsSection() {
     setLoading(true);
     try {
       await deleteParticipant(dni, currentEvent.id);
-      showAlert('Éxito', 'Participante eliminado');
+      showResult(
+        'success',
+        'Participante eliminado',
+        `${nombre} ha sido eliminado del evento.`,
+        [
+          `🆔 DNI: ${dni}`,
+          `📅 Evento: ${currentEvent.name}`,
+        ]
+      );
       loadParticipants();
     } catch (error: any) {
-      showAlert('Error', error.message || 'No se pudo eliminar');
+      showResult(
+        'error',
+        'Error al eliminar',
+        `No se pudo eliminar a ${nombre} del evento.`,
+        [error.message || 'Error desconocido', 'Inténtalo de nuevo.']
+      );
     } finally {
       setLoading(false);
     }
@@ -381,20 +526,39 @@ export function ParticipantsSection() {
    */
   const handleSendEmailToParticipant = async (participant: Participant) => {
     if (!participant.email) {
-      showAlert('Error', 'Este participante no tiene email registrado');
+      showResult(
+        'warning',
+        'Sin email registrado',
+        `${participant.nombre} no tiene dirección de email registrada.`,
+        [
+          '📧 No se puede enviar la invitación sin email.',
+          'Edita el participante para añadir su email o impórtalo de nuevo con el email correcto.',
+        ]
+      );
       return;
     }
-    if (!currentEvent) {
-      showAlert('Error', 'No hay evento seleccionado');
+    if (!requireEvent('enviar invitaciones')) {
       return;
     }
 
     // Check if there's a default template
     const template = await getDefaultTemplate(currentEvent.id);
     if (!template) {
-      showAlert(
-        'Sin plantilla',
-        'No hay plantilla de email configurada para este evento. Ve a la sección "Invitaciones" para crear una.'
+      showResult(
+        'warning',
+        'Sin plantilla de email',
+        'No hay plantilla de email configurada para este evento.',
+        [
+          '📧 Necesitas crear una plantilla antes de enviar invitaciones.',
+          '💡 Ve a la sección "Invitaciones" en el menú de administración.',
+        ],
+        {
+          label: 'Ir a Invitaciones',
+          onPress: () => {
+            closeResultModal();
+            // Note: Navigation would need to be implemented
+          },
+        }
       );
       return;
     }
@@ -408,23 +572,36 @@ export function ParticipantsSection() {
    * Send email to all participants with email
    */
   const handleSendEmailToAll = async () => {
-    if (!currentEvent) {
-      showAlert('Error', 'No hay evento seleccionado');
+    if (!requireEvent('enviar invitaciones masivas')) {
       return;
     }
 
     const participantsWithEmail = participants.filter((p) => p.email);
     if (participantsWithEmail.length === 0) {
-      showAlert('Error', 'No hay participantes con email registrado');
+      showResult(
+        'warning',
+        'Sin destinatarios',
+        'No hay participantes con email registrado en este evento.',
+        [
+          `👥 Participantes totales: ${participants.length}`,
+          '📧 Participantes con email: 0',
+          '💡 Importa los participantes con sus emails o añádelos manualmente.',
+        ]
+      );
       return;
     }
 
     // Check if there's a default template
     const template = await getDefaultTemplate(currentEvent.id);
     if (!template) {
-      showAlert(
-        'Sin plantilla',
-        'No hay plantilla de email configurada para este evento. Ve a la sección "Invitaciones" para crear una.'
+      showResult(
+        'warning',
+        'Sin plantilla de email',
+        'No hay plantilla de email configurada para este evento.',
+        [
+          '📧 Necesitas crear una plantilla antes de enviar invitaciones.',
+          '💡 Ve a la sección "Invitaciones" en el menú de administración.',
+        ]
       );
       return;
     }
@@ -444,30 +621,79 @@ export function ParticipantsSection() {
       if (emailTarget === 'single' && selectedParticipantForEmail) {
         const result = await sendEmailToParticipant(currentEvent.id, selectedParticipantForEmail.dni);
         if (result.success) {
-          showAlert('Éxito', `Email enviado a ${selectedParticipantForEmail.nombre}`);
+          showResult(
+            'success',
+            'Email enviado',
+            `La invitación se ha enviado correctamente a ${selectedParticipantForEmail.nombre}.`,
+            [
+              `📧 Destinatario: ${selectedParticipantForEmail.email}`,
+              `📅 Evento: ${currentEvent.name}`,
+              '📱 El email incluye el código QR para acceder al evento.',
+            ]
+          );
         } else {
-          showAlert('Error', result.error || 'No se pudo enviar el email');
+          showResult(
+            'error',
+            'Error al enviar email',
+            `No se pudo enviar la invitación a ${selectedParticipantForEmail.nombre}.`,
+            [
+              result.error || 'Error desconocido',
+              `📧 Email: ${selectedParticipantForEmail.email}`,
+              'Verifica que el email sea correcto e inténtalo de nuevo.',
+            ]
+          );
         }
       } else {
         const result = await sendBulkEmails(currentEvent.id);
-        if (result.success) {
-          showAlert(
-            'Envío completado',
-            `Se enviaron ${result.sentCount} emails correctamente.${
-              result.failedCount > 0 ? `\n${result.failedCount} fallaron.` : ''
-            }`
+        const participantsWithEmail = participants.filter((p) => p.email).length;
+
+        if (result.success && result.failedCount === 0) {
+          showResult(
+            'success',
+            'Envío masivo completado',
+            `Todas las invitaciones se han enviado correctamente.`,
+            [
+              `✅ Emails enviados: ${result.sentCount}`,
+              `📅 Evento: ${currentEvent.name}`,
+              '📱 Cada email incluye el código QR personalizado.',
+            ]
+          );
+        } else if (result.sentCount > 0) {
+          showResult(
+            'warning',
+            'Envío parcial',
+            `Se enviaron algunas invitaciones, pero hubo errores.`,
+            [
+              `✅ Enviados correctamente: ${result.sentCount}`,
+              `❌ Fallidos: ${result.failedCount}`,
+              `📊 Total con email: ${participantsWithEmail}`,
+              'Revisa los emails fallidos e inténtalo de nuevo.',
+            ]
           );
         } else {
-          showAlert(
-            'Envío parcial',
-            `Enviados: ${result.sentCount}\nFallidos: ${result.failedCount}`
+          showResult(
+            'error',
+            'Error en envío masivo',
+            'No se pudo enviar ninguna invitación.',
+            [
+              `❌ Fallidos: ${result.failedCount}`,
+              'Verifica la configuración de email y la plantilla.',
+            ]
           );
         }
       }
       setShowEmailConfirmModal(false);
       setSelectedParticipantForEmail(null);
     } catch (error: any) {
-      showAlert('Error', error.message || 'Error al enviar emails');
+      showResult(
+        'error',
+        'Error al enviar emails',
+        'Ocurrió un error inesperado durante el envío.',
+        [
+          error.message || 'Error desconocido',
+          'Verifica tu conexión e inténtalo de nuevo.',
+        ]
+      );
     } finally {
       setSendingEmail(false);
     }
@@ -477,15 +703,14 @@ export function ParticipantsSection() {
    * Reset all participant states
    */
   const handleResetStates = async () => {
-    if (!currentEvent) {
-      showAlert('Error', 'Selecciona un evento primero');
+    if (!requireEvent('resetear estados')) {
       return;
     }
 
     const confirmed = await showConfirm(
       'Confirmar Reset',
-      '¿Estás seguro de resetear TODOS los estados de participantes? Esto marcará a todos como no registrados.',
-      'Resetear',
+      `¿Estás seguro de resetear TODOS los estados de ${participants.length} participantes?\n\nEsto marcará a todos como:\n• No registrados\n• Fuera de Aula Magna\n• Fuera de Master Class\n• Fuera de Cena\n\n⚠️ Esta acción no se puede deshacer.`,
+      'Resetear todo',
       'Cancelar',
       true
     );
@@ -495,10 +720,28 @@ export function ParticipantsSection() {
     setLoading(true);
     try {
       await resetAllParticipantStates(currentEvent.id);
-      showAlert('Éxito', 'Estados reseteados correctamente');
+      showResult(
+        'success',
+        'Estados reseteados',
+        `Se han reseteado los estados de todos los participantes.`,
+        [
+          `📅 Evento: ${currentEvent.name}`,
+          `👥 Participantes afectados: ${participants.length}`,
+          '✅ Todos marcados como no registrados',
+          '✅ Todos fuera de todas las ubicaciones',
+        ]
+      );
       loadParticipants();
     } catch (error: any) {
-      showAlert('Error', error.message || 'No se pudo resetear');
+      showResult(
+        'error',
+        'Error al resetear',
+        'No se pudieron resetear los estados de los participantes.',
+        [
+          error.message || 'Error desconocido',
+          'Inténtalo de nuevo o contacta soporte.',
+        ]
+      );
     } finally {
       setLoading(false);
     }
@@ -1063,6 +1306,78 @@ export function ParticipantsSection() {
         </View>
       </Modal>
 
+      {/* Result modal (unified feedback) */}
+      <Modal
+        visible={resultModal.visible}
+        animationType="fade"
+        transparent
+        onRequestClose={closeResultModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.resultModal, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
+            {/* Icon based on type */}
+            <View style={[
+              styles.resultIconContainer,
+              {
+                backgroundColor:
+                  resultModal.type === 'success' ? Colors.light.success + '20' :
+                  resultModal.type === 'error' ? Colors.light.error + '20' :
+                  resultModal.type === 'warning' ? Colors.light.warning + '20' :
+                  Colors.light.primary + '20',
+              },
+            ]}>
+              <Text style={styles.resultIcon}>
+                {resultModal.type === 'success' ? '✅' :
+                 resultModal.type === 'error' ? '❌' :
+                 resultModal.type === 'warning' ? '⚠️' : 'ℹ️'}
+              </Text>
+            </View>
+
+            {/* Title */}
+            <ThemedText style={styles.resultTitle}>{resultModal.title}</ThemedText>
+
+            {/* Message */}
+            <ThemedText style={styles.resultMessage}>{resultModal.message}</ThemedText>
+
+            {/* Details */}
+            {resultModal.details && resultModal.details.length > 0 && (
+              <View style={[
+                styles.resultDetails,
+                { backgroundColor: Colors[colorScheme ?? 'light'].background },
+              ]}>
+                {resultModal.details.map((detail, index) => (
+                  <ThemedText key={index} style={styles.resultDetailItem}>
+                    {detail}
+                  </ThemedText>
+                ))}
+              </View>
+            )}
+
+            {/* Actions */}
+            <View style={styles.resultActions}>
+              {resultModal.action && (
+                <TouchableOpacity
+                  style={[styles.resultActionButton, { backgroundColor: Colors[colorScheme ?? 'light'].primary }]}
+                  onPress={resultModal.action.onPress}
+                >
+                  <Text style={styles.resultActionButtonText}>{resultModal.action.label}</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.resultCloseButton,
+                  resultModal.action ? { flex: 1 } : { width: '100%' },
+                  { borderColor: Colors[colorScheme ?? 'light'].border },
+                ]}
+                onPress={closeResultModal}
+              >
+                <ThemedText style={styles.resultCloseButtonText}>Cerrar</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Format info modal */}
       <Modal
         visible={showFormatInfoModal}
@@ -1609,6 +1924,74 @@ const styles = StyleSheet.create({
   confirmModalButtonText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  // Result modal styles
+  resultModal: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    alignItems: 'center',
+  },
+  resultIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  resultIcon: {
+    fontSize: 32,
+  },
+  resultTitle: {
+    fontSize: FontSizes.xl,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+  resultMessage: {
+    fontSize: FontSizes.md,
+    textAlign: 'center',
+    opacity: 0.8,
+    marginBottom: Spacing.md,
+  },
+  resultDetails: {
+    width: '100%',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  resultDetailItem: {
+    fontSize: FontSizes.sm,
+    marginBottom: Spacing.xs,
+    lineHeight: 20,
+  },
+  resultActions: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    width: '100%',
+  },
+  resultActionButton: {
+    flex: 1,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+  },
+  resultActionButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: FontSizes.md,
+  },
+  resultCloseButton: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  resultCloseButtonText: {
+    fontWeight: '600',
+    fontSize: FontSizes.md,
   },
   // Format info modal styles
   formatInfoScrollView: {
