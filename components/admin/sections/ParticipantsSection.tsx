@@ -49,6 +49,33 @@ import { getEventsByOrganization, getAllEvents } from '@/services/eventService';
 import { getUserData } from '@/services/userService';
 import { User } from '@/types/user';
 
+// Cross-platform alert helpers
+const showAlert = (title: string, message: string) => {
+  if (Platform.OS === 'web') {
+    window.alert(`${title}\n\n${message}`);
+  } else {
+    Alert.alert(title, message);
+  }
+};
+
+const showConfirm = async (
+  title: string,
+  message: string,
+  confirmText: string = 'Confirmar',
+  cancelText: string = 'Cancelar',
+  destructive: boolean = false
+): Promise<boolean> => {
+  if (Platform.OS === 'web') {
+    return window.confirm(`${title}\n\n${message}`);
+  }
+  return new Promise((resolve) => {
+    Alert.alert(title, message, [
+      { text: cancelText, style: 'cancel', onPress: () => resolve(false) },
+      { text: confirmText, style: destructive ? 'destructive' : 'default', onPress: () => resolve(true) },
+    ]);
+  });
+};
+
 export function ParticipantsSection() {
   const colorScheme = useColorScheme();
   const { currentEvent, setCurrentEvent } = useEvent();
@@ -175,7 +202,7 @@ export function ParticipantsSection() {
       setParticipants(data);
     } catch (error) {
       console.error('Error loading participants:', error);
-      Alert.alert('Error', 'No se pudieron cargar los participantes');
+      showAlert('Error', 'No se pudieron cargar los participantes');
     } finally {
       setLoadingParticipants(false);
     }
@@ -186,7 +213,7 @@ export function ParticipantsSection() {
    */
   const handleImportCSV = async () => {
     if (!currentEvent) {
-      Alert.alert('Error', 'Selecciona un evento primero');
+      showAlert('Error', 'Selecciona un evento primero');
       return;
     }
 
@@ -221,7 +248,7 @@ export function ParticipantsSection() {
       }
 
       setLoading(false);
-      Alert.alert(
+      showAlert(
         'Importación Completada',
         `Se ${importMode === 'replace' ? 'reemplazaron' : 'importaron'} ${count} participantes correctamente.`
       );
@@ -231,7 +258,7 @@ export function ParticipantsSection() {
     } catch (error: any) {
       console.error('Error importing:', error);
       setLoading(false);
-      Alert.alert('Error de Importación', error.message || 'Error al procesar el archivo');
+      showAlert('Error de Importación', error.message || 'Error al procesar el archivo');
     }
   };
 
@@ -240,7 +267,7 @@ export function ParticipantsSection() {
    */
   const handleExportData = async () => {
     if (!currentEvent) {
-      Alert.alert('Error', 'Selecciona un evento primero');
+      showAlert('Error', 'Selecciona un evento primero');
       return;
     }
 
@@ -250,7 +277,7 @@ export function ParticipantsSection() {
       setLoading(false);
 
       if (Platform.OS === 'web') {
-        Alert.alert('Exportación Completada', 'El archivo se ha descargado');
+        showAlert('Exportación Completada', 'El archivo se ha descargado');
       } else {
         const isAvailable = await Sharing.isAvailableAsync();
         if (isAvailable) {
@@ -259,13 +286,13 @@ export function ParticipantsSection() {
             dialogTitle: 'Exportar datos del evento',
           });
         } else {
-          Alert.alert('Exportación Completada', `Archivo guardado en: ${fileUri}`);
+          showAlert('Exportación Completada', `Archivo guardado en: ${fileUri}`);
         }
       }
     } catch (error: any) {
       console.error('Error exporting:', error);
       setLoading(false);
-      Alert.alert('Error de Exportación', error.message || 'Error al exportar datos');
+      showAlert('Error de Exportación', error.message || 'Error al exportar datos');
     }
   };
 
@@ -274,12 +301,12 @@ export function ParticipantsSection() {
    */
   const handleAddParticipant = async () => {
     if (!newParticipantDNI.trim() || !newParticipantNombre.trim()) {
-      Alert.alert('Error', 'DNI y Nombre son obligatorios');
+      showAlert('Error', 'DNI y Nombre son obligatorios');
       return;
     }
 
     if (!currentEvent) {
-      Alert.alert('Error', 'Selecciona un evento primero');
+      showAlert('Error', 'Selecciona un evento primero');
       return;
     }
 
@@ -303,7 +330,7 @@ export function ParticipantsSection() {
         },
       }, currentEvent.id);
 
-      Alert.alert('Éxito', 'Participante añadido correctamente');
+      showAlert('Éxito', 'Participante añadido correctamente');
       setShowAddParticipantModal(false);
       setNewParticipantDNI('');
       setNewParticipantNombre('');
@@ -312,7 +339,7 @@ export function ParticipantsSection() {
       loadParticipants();
     } catch (error: any) {
       console.error('Error adding participant:', error);
-      Alert.alert('Error', error.message || 'No se pudo añadir el participante');
+      showAlert('Error', error.message || 'No se pudo añadir el participante');
     } finally {
       setLoading(false);
     }
@@ -321,32 +348,29 @@ export function ParticipantsSection() {
   /**
    * Delete participant
    */
-  const handleDeleteParticipant = (dni: string, nombre: string) => {
+  const handleDeleteParticipant = async (dni: string, nombre: string) => {
     if (!currentEvent) return;
 
-    Alert.alert(
+    const confirmed = await showConfirm(
       'Confirmar eliminación',
       `¿Estás seguro de eliminar a ${nombre} (${dni})?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await deleteParticipant(dni, currentEvent.id);
-              Alert.alert('Éxito', 'Participante eliminado');
-              loadParticipants();
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'No se pudo eliminar');
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ]
+      'Eliminar',
+      'Cancelar',
+      true
     );
+
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      await deleteParticipant(dni, currentEvent.id);
+      showAlert('Éxito', 'Participante eliminado');
+      loadParticipants();
+    } catch (error: any) {
+      showAlert('Error', error.message || 'No se pudo eliminar');
+    } finally {
+      setLoading(false);
+    }
   };
 
   /**
@@ -354,18 +378,18 @@ export function ParticipantsSection() {
    */
   const handleSendEmailToParticipant = async (participant: Participant) => {
     if (!participant.email) {
-      Alert.alert('Error', 'Este participante no tiene email registrado');
+      showAlert('Error', 'Este participante no tiene email registrado');
       return;
     }
     if (!currentEvent) {
-      Alert.alert('Error', 'No hay evento seleccionado');
+      showAlert('Error', 'No hay evento seleccionado');
       return;
     }
 
     // Check if there's a default template
     const template = await getDefaultTemplate(currentEvent.id);
     if (!template) {
-      Alert.alert(
+      showAlert(
         'Sin plantilla',
         'No hay plantilla de email configurada para este evento. Ve a la sección "Invitaciones" para crear una.'
       );
@@ -382,20 +406,20 @@ export function ParticipantsSection() {
    */
   const handleSendEmailToAll = async () => {
     if (!currentEvent) {
-      Alert.alert('Error', 'No hay evento seleccionado');
+      showAlert('Error', 'No hay evento seleccionado');
       return;
     }
 
     const participantsWithEmail = participants.filter((p) => p.email);
     if (participantsWithEmail.length === 0) {
-      Alert.alert('Error', 'No hay participantes con email registrado');
+      showAlert('Error', 'No hay participantes con email registrado');
       return;
     }
 
     // Check if there's a default template
     const template = await getDefaultTemplate(currentEvent.id);
     if (!template) {
-      Alert.alert(
+      showAlert(
         'Sin plantilla',
         'No hay plantilla de email configurada para este evento. Ve a la sección "Invitaciones" para crear una.'
       );
@@ -417,21 +441,21 @@ export function ParticipantsSection() {
       if (emailTarget === 'single' && selectedParticipantForEmail) {
         const result = await sendEmailToParticipant(currentEvent.id, selectedParticipantForEmail.dni);
         if (result.success) {
-          Alert.alert('Éxito', `Email enviado a ${selectedParticipantForEmail.nombre}`);
+          showAlert('Éxito', `Email enviado a ${selectedParticipantForEmail.nombre}`);
         } else {
-          Alert.alert('Error', result.error || 'No se pudo enviar el email');
+          showAlert('Error', result.error || 'No se pudo enviar el email');
         }
       } else {
         const result = await sendBulkEmails(currentEvent.id);
         if (result.success) {
-          Alert.alert(
+          showAlert(
             'Envío completado',
             `Se enviaron ${result.sentCount} emails correctamente.${
               result.failedCount > 0 ? `\n${result.failedCount} fallaron.` : ''
             }`
           );
         } else {
-          Alert.alert(
+          showAlert(
             'Envío parcial',
             `Enviados: ${result.sentCount}\nFallidos: ${result.failedCount}`
           );
@@ -440,7 +464,7 @@ export function ParticipantsSection() {
       setShowEmailConfirmModal(false);
       setSelectedParticipantForEmail(null);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Error al enviar emails');
+      showAlert('Error', error.message || 'Error al enviar emails');
     } finally {
       setSendingEmail(false);
     }
@@ -449,45 +473,41 @@ export function ParticipantsSection() {
   /**
    * Reset all participant states
    */
-  const handleResetStates = () => {
+  const handleResetStates = async () => {
     if (!currentEvent) {
-      Alert.alert('Error', 'Selecciona un evento primero');
+      showAlert('Error', 'Selecciona un evento primero');
       return;
     }
 
-    Alert.alert(
+    const confirmed = await showConfirm(
       'Confirmar Reset',
       '¿Estás seguro de resetear TODOS los estados de participantes? Esto marcará a todos como no registrados.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Resetear',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await resetAllParticipantStates(currentEvent.id);
-              Alert.alert('Éxito', 'Estados reseteados correctamente');
-              loadParticipants();
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'No se pudo resetear');
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ]
+      'Resetear',
+      'Cancelar',
+      true
     );
+
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      await resetAllParticipantStates(currentEvent.id);
+      showAlert('Éxito', 'Estados reseteados correctamente');
+      loadParticipants();
+    } catch (error: any) {
+      showAlert('Error', error.message || 'No se pudo resetear');
+    } finally {
+      setLoading(false);
+    }
   };
 
   /**
    * Show CSV format info
    */
   const showCSVFormatInfo = () => {
-    Alert.alert(
+    showAlert(
       'Formatos Aceptados',
-      'CSV (.csv):\nDNI,Nombre,MasterClass,Cena\n12345678A,Juan Pérez,Si,No\n\nExcel (.xlsx, .xls):\nMismas columnas en la primera hoja.\n\nMasterClass y Cena: Si/No o 1/0',
-      [{ text: 'Entendido' }]
+      'CSV (.csv):\nDNI,Nombre,MasterClass,Cena\n12345678A,Juan Pérez,Si,No\n\nExcel (.xlsx, .xls):\nMismas columnas en la primera hoja.\n\nMasterClass y Cena: Si/No o 1/0'
     );
   };
 
