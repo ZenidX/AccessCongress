@@ -109,6 +109,9 @@ export function ParticipantsSection() {
   const [selectedParticipantForEmail, setSelectedParticipantForEmail] = useState<Participant | null>(null);
   const [sendingEmail, setSendingEmail] = useState(false);
 
+  // Format info modal state
+  const [showFormatInfoModal, setShowFormatInfoModal] = useState(false);
+
   // Load events directly (same logic as EventManager)
   useEffect(() => {
     const loadEvents = async () => {
@@ -505,10 +508,7 @@ export function ParticipantsSection() {
    * Show CSV format info
    */
   const showCSVFormatInfo = () => {
-    showAlert(
-      'Formatos Aceptados',
-      'CSV (.csv):\nDNI,Nombre,MasterClass,Cena\n12345678A,Juan Pérez,Si,No\n\nExcel (.xlsx, .xls):\nMismas columnas en la primera hoja.\n\nMasterClass y Cena: Si/No o 1/0'
-    );
+    setShowFormatInfoModal(true);
   };
 
   return (
@@ -1062,6 +1062,154 @@ export function ParticipantsSection() {
           </View>
         </View>
       </Modal>
+
+      {/* Format info modal */}
+      <Modal
+        visible={showFormatInfoModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowFormatInfoModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <ScrollView
+            style={styles.formatInfoScrollView}
+            contentContainerStyle={styles.formatInfoScrollContent}
+          >
+            <View style={[styles.formatInfoModal, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
+              <ThemedText style={styles.modalTitle}>
+                Formato de Importación
+              </ThemedText>
+
+              {/* Formatos aceptados */}
+              <View style={styles.formatSection}>
+                <ThemedText style={styles.formatSectionTitle}>
+                  FORMATOS DE ARCHIVO ACEPTADOS
+                </ThemedText>
+                <ThemedText style={styles.formatText}>
+                  • Archivos CSV (.csv){'\n'}
+                  • Archivos Excel (.xlsx, .xls)
+                </ThemedText>
+              </View>
+
+              {/* Hoja de Excel */}
+              <View style={styles.formatSection}>
+                <ThemedText style={styles.formatSectionTitle}>
+                  HOJA DE EXCEL
+                </ThemedText>
+                <ThemedText style={styles.formatText}>
+                  Se usa siempre la <ThemedText style={styles.formatBold}>primera hoja</ThemedText> del archivo Excel, independientemente de su nombre.
+                </ThemedText>
+              </View>
+
+              {/* Columnas obligatorias */}
+              <View style={styles.formatSection}>
+                <ThemedText style={styles.formatSectionTitle}>
+                  COLUMNAS OBLIGATORIAS
+                </ThemedText>
+                <ThemedText style={styles.formatText}>
+                  <ThemedText style={styles.formatBold}>DNI</ThemedText> - Identificador único del participante{'\n'}
+                  • Puede ser cualquier texto (ej: &quot;12345678A&quot;, &quot;P001&quot;){'\n'}
+                  • Se usa como clave primaria en la base de datos{'\n'}
+                  • Si hay DNIs duplicados, solo se guarda el último{'\n\n'}
+                  <ThemedText style={styles.formatBold}>NOMBRE</ThemedText> - Nombre completo{'\n'}
+                  • Se acepta columna &quot;Nombre&quot; directamente{'\n'}
+                  • O combinación de &quot;NOM&quot; + &quot;COGNOMS&quot; (se concatenan automáticamente)
+                </ThemedText>
+              </View>
+
+              {/* Columnas funcionales */}
+              <View style={styles.formatSection}>
+                <ThemedText style={styles.formatSectionTitle}>
+                  COLUMNAS FUNCIONALES (Afectan al funcionamiento de la app)
+                </ThemedText>
+                <ThemedText style={styles.formatText}>
+                  <ThemedText style={styles.formatBold}>ACCESO</ThemedText> - Tipo de acceso al evento{'\n'}
+                  • Si contiene &quot;Presencial&quot; → Permiso de Aula Magna{'\n'}
+                  • Cualquier otro valor (ej: &quot;Online&quot;) → Sin acceso presencial{'\n\n'}
+                  <ThemedText style={styles.formatBold}>MASTER_CLASS</ThemedText> - Permiso para Master Class{'\n'}
+                  • Valores positivos: &quot;Si&quot;, &quot;Sí&quot;, &quot;1&quot;, &quot;Yes&quot;, &quot;True&quot;{'\n'}
+                  • Cualquier otro valor = No tiene permiso{'\n\n'}
+                  <ThemedText style={styles.formatBold}>CENA</ThemedText> - Permiso para Cena{'\n'}
+                  • Mismos valores positivos que Master Class{'\n\n'}
+                  <ThemedText style={styles.formatBold}>MAIL / EMAIL</ThemedText> - Correo electrónico{'\n'}
+                  • Se muestra al escanear el QR (junto con nombre y DNI){'\n'}
+                  • Necesario para enviar invitaciones con código QR{'\n'}
+                  • Sin email, no se puede enviar la invitación al participante
+                </ThemedText>
+              </View>
+
+              {/* Columnas informativas */}
+              <View style={styles.formatSection}>
+                <ThemedText style={styles.formatSectionTitle}>
+                  COLUMNAS INFORMATIVAS (Opcionales)
+                </ThemedText>
+                <ThemedText style={styles.formatText}>
+                  Si no existen o están vacías, se importan como vacías:{'\n\n'}
+                  • <ThemedText style={styles.formatBold}>TELÈFON / TELEFONO</ThemedText> - Teléfono de contacto{'\n'}
+                  • <ThemedText style={styles.formatBold}>ENTITAT/INSTITUCIÓ / ENTITAT</ThemedText> - Entidad o institución{'\n'}
+                  • <ThemedText style={styles.formatBold}>TIPUS D&apos;ESCOLA / ESCUELA</ThemedText> - Tipo de escuela{'\n'}
+                  • <ThemedText style={styles.formatBold}>LLOC/RESPONSABILITAT / CARGO</ThemedText> - Cargo o responsabilidad{'\n'}
+                  • <ThemedText style={styles.formatBold}>HA PAGAT? / HA PAGADO</ThemedText> - Estado de pago (Si/No)
+                </ThemedText>
+              </View>
+
+              {/* Notas importantes */}
+              <View style={[styles.formatSection, styles.formatNoteSection]}>
+                <ThemedText style={styles.formatSectionTitle}>
+                  NOTAS IMPORTANTES
+                </ThemedText>
+                <ThemedText style={styles.formatText}>
+                  • El orden de las columnas NO importa{'\n'}
+                  • Las mayúsculas/minúsculas NO importan{'\n'}
+                  • La primera fila debe ser la cabecera con los nombres{'\n'}
+                  • Las filas sin DNI o sin Nombre se saltan automáticamente{'\n'}
+                  • DNIs duplicados se sobrescriben (solo cuenta el último)
+                </ThemedText>
+              </View>
+
+              {/* Ejemplo CSV */}
+              <View style={[styles.formatSection, styles.formatExampleSection]}>
+                <ThemedText style={styles.formatSectionTitle}>
+                  EJEMPLO MÍNIMO CSV
+                </ThemedText>
+                <View style={styles.codeBlock}>
+                  <Text style={styles.codeText}>
+                    DNI,Nombre,Acceso,Master_Class,Cena{'\n'}
+                    12345678A,Juan Pérez,Presencial,Si,No{'\n'}
+                    87654321B,María García,Online,No,Si
+                  </Text>
+                </View>
+              </View>
+
+              {/* Formatos QR */}
+              <View style={styles.formatSection}>
+                <ThemedText style={styles.formatSectionTitle}>
+                  FORMATOS DE QR ACEPTADOS
+                </ThemedText>
+                <ThemedText style={styles.formatText}>
+                  El escáner acepta varios formatos de código QR:{'\n\n'}
+                  <ThemedText style={styles.formatBold}>1. Nombre/DNI/Correo</ThemedText> (recomendado){'\n'}
+                  Formato usado en las invitaciones enviadas por email.{'\n'}
+                  Ejemplo: Juan Pérez/12345678A/juan@email.com{'\n\n'}
+                  <ThemedText style={styles.formatBold}>2. EventoID/DNI</ThemedText>{'\n'}
+                  Valida que el QR sea del evento activo.{'\n'}
+                  Ejemplo: abc123xyz/12345678A{'\n\n'}
+                  <ThemedText style={styles.formatBold}>3. JSON</ThemedText> (legacy){'\n'}
+                  Formato alternativo en JSON.{'\n'}
+                  Ejemplo: {'{'}&#34;dni&#34;:&#34;12345678A&#34;,&#34;nombre&#34;:&#34;Juan&#34;{'}'}
+                </ThemedText>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.formatCloseButton, { backgroundColor: Colors[colorScheme ?? 'light'].primary }]}
+                onPress={() => setShowFormatInfoModal(false)}
+              >
+                <Text style={styles.formatCloseButtonText}>Entendido</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1461,5 +1609,74 @@ const styles = StyleSheet.create({
   confirmModalButtonText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  // Format info modal styles
+  formatInfoScrollView: {
+    flex: 1,
+    width: '100%',
+  },
+  formatInfoScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+  formatInfoModal: {
+    width: '100%',
+    maxWidth: 550,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+  },
+  formatSection: {
+    marginBottom: Spacing.lg,
+  },
+  formatSectionTitle: {
+    fontSize: FontSizes.sm,
+    fontWeight: 'bold',
+    color: Colors.light.primary,
+    marginBottom: Spacing.xs,
+    letterSpacing: 0.5,
+  },
+  formatText: {
+    fontSize: FontSizes.sm,
+    lineHeight: 22,
+  },
+  formatBold: {
+    fontWeight: 'bold',
+  },
+  formatNoteSection: {
+    backgroundColor: Colors.light.warning + '15',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.light.warning,
+  },
+  formatExampleSection: {
+    backgroundColor: Colors.light.primary + '10',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  codeBlock: {
+    backgroundColor: '#1e1e1e',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    marginTop: Spacing.xs,
+  },
+  codeText: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: FontSizes.xs,
+    color: '#d4d4d4',
+    lineHeight: 18,
+  },
+  formatCloseButton: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    marginTop: Spacing.md,
+  },
+  formatCloseButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: FontSizes.md,
   },
 });
