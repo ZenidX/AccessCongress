@@ -145,8 +145,7 @@ const styles = StyleSheet.create({
     paddingRight: 0,
   },
   imageColumn: {
-    width: 280,
-    marginLeft: Spacing.lg,
+    flex: 1,
     marginTop: -Spacing.lg,
     marginBottom: -Spacing.lg,
     marginRight: -Spacing.lg,
@@ -154,7 +153,7 @@ const styles = StyleSheet.create({
   developerImageDesktop: {
     width: '100%',
     height: '100%',
-    resizeMode: 'contain',
+    resizeMode: 'cover',
   },
   developerImageMobile: {
     width: '100%',
