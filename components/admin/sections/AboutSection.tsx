@@ -145,19 +145,16 @@ const styles = StyleSheet.create({
     paddingRight: 0,
   },
   imageColumn: {
-    width: 200,
+    width: 280,
     marginLeft: Spacing.lg,
     marginTop: -Spacing.lg,
     marginBottom: -Spacing.lg,
     marginRight: -Spacing.lg,
-    overflow: 'hidden',
   },
   developerImageDesktop: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
-    borderTopRightRadius: BorderRadius.lg,
-    borderBottomRightRadius: BorderRadius.lg,
+    resizeMode: 'contain',
   },
   developerImageMobile: {
     width: '100%',
