@@ -8,10 +8,12 @@
  */
 
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Image } from 'react-native';
 import { ThemedText } from '@/components/themed/themed-text';
 import { Colors, BorderRadius, Spacing, Shadows, FontSizes } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+
+const developerImage = require('@/assets/images/developer.png');
 
 export function AboutSection() {
   const colorScheme = useColorScheme();
@@ -49,15 +51,16 @@ export function AboutSection() {
           Desarrollador
         </ThemedText>
 
-        <ThemedText style={styles.infoText}>
-          <ThemedText style={styles.infoBold}>Aplicación desarrollada por: </ThemedText>
-          Xavi Lara
-        </ThemedText>
-
-        <ThemedText style={[styles.infoText, { marginTop: 15 }]}>
-          <ThemedText style={styles.infoBold}>Contacto: </ThemedText>
-          zenid77@gmail.com
-        </ThemedText>
+        <View style={styles.developerContainer}>
+          <Image source={developerImage} style={styles.developerImage} />
+          <View style={styles.developerInfo}>
+            <ThemedText style={styles.developerName}>Xavi Lara</ThemedText>
+            <ThemedText style={styles.developerRole}>Full Stack Developer</ThemedText>
+            <ThemedText style={[styles.infoText, { marginTop: Spacing.sm }]}>
+              zenid77@gmail.com
+            </ThemedText>
+          </View>
+        </View>
 
         <ThemedText style={[styles.sectionHeader, { marginTop: Spacing.xxl }]}>
           Información Técnica
@@ -102,5 +105,28 @@ const styles = StyleSheet.create({
   },
   infoBold: {
     fontWeight: 'bold',
+  },
+  developerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.lg,
+  },
+  developerImage: {
+    width: 100,
+    height: 120,
+    borderRadius: BorderRadius.md,
+    resizeMode: 'cover',
+  },
+  developerInfo: {
+    flex: 1,
+  },
+  developerName: {
+    fontSize: FontSizes.lg,
+    fontWeight: 'bold',
+  },
+  developerRole: {
+    fontSize: FontSizes.md,
+    opacity: 0.7,
+    marginTop: 2,
   },
 });
