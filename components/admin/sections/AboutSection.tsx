@@ -112,18 +112,18 @@ const styles = StyleSheet.create({
   },
   developerContainer: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: Spacing.lg,
+    minHeight: 250,
   },
   developerImage: {
-    width: 120,
-    height: 200,
+    width: 150,
+    height: '100%',
     borderRadius: BorderRadius.md,
     resizeMode: 'cover',
   },
   developerInfo: {
     flex: 1,
     justifyContent: 'center',
+    paddingRight: Spacing.lg,
   },
   developerName: {
     fontSize: FontSizes.xl,
