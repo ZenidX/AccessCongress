@@ -28,7 +28,6 @@ import {
   getUsersByOrganization,
   addEventToUser,
   removeEventFromUser,
-  getUsersAssignedToEvent,
 } from '@/services/userService';
 
 // Role labels and colors
@@ -73,34 +72,54 @@ export function UserEventAssignment({
     try {
       setLoading(true);
 
-      // Get all users from the organization
-      const orgId = isSuperAdmin() ? event.organizationId : currentUser?.organizationId;
+      // Get organization ID - prefer event's org, fallback to user's org
+      const orgId = event.organizationId || currentUser?.organizationId;
+
+      console.log('[UserEventAssignment] Loading data:', {
+        eventId: event.id,
+        eventOrgId: event.organizationId,
+        userOrgId: currentUser?.organizationId,
+        resolvedOrgId: orgId,
+      });
+
       if (!orgId) {
+        console.warn('[UserEventAssignment] No organization ID found');
         setAdmins([]);
         setControllers([]);
         return;
       }
 
       const allUsers = await getUsersByOrganization(orgId);
+      console.log('[UserEventAssignment] Loaded users:', allUsers.length);
 
       // Filter by role (exclude admin_responsable - they have full access anyway)
       const adminList = allUsers.filter((u) => u.role === 'admin');
       const controllerList = allUsers.filter((u) => u.role === 'controlador');
 
-      // Get users already assigned to this event
-      const assignedUsers = await getUsersAssignedToEvent(event.id);
-      const assignedIds = new Set(assignedUsers.map((u) => u.uid));
+      console.log('[UserEventAssignment] Filtered:', {
+        admins: adminList.length,
+        controllers: controllerList.length,
+      });
+
+      // Determine assigned users from their assignedEventIds field (no extra query needed)
+      const assignedIds = new Set(
+        allUsers
+          .filter((u) => u.assignedEventIds?.includes(event.id))
+          .map((u) => u.uid)
+      );
+
+      console.log('[UserEventAssignment] Assigned to event:', assignedIds.size);
 
       setAdmins(adminList);
       setControllers(controllerList);
       setAssignedUserIds(assignedIds);
     } catch (error) {
-      console.error('Error loading users:', error);
+      console.error('[UserEventAssignment] Error loading users:', error);
       Alert.alert('Error', 'No se pudieron cargar los usuarios');
     } finally {
       setLoading(false);
     }
-  }, [event.id, event.organizationId, currentUser?.organizationId, isSuperAdmin]);
+  }, [event.id, event.organizationId, currentUser?.organizationId]);
 
   // Prepare sections for SectionList
   const sections: UserSection[] = [
@@ -157,8 +176,9 @@ export function UserEventAssignment({
     }
   };
 
-  const renderController = ({ item }: { item: User }) => {
-    const isAssigned = assignedUserIds.has(item.uid);
+  const renderUser = ({ item }: { item: User }) => {
+    const isAdmin = item.role === 'admin';
+    const isAssigned = isAdmin || assignedUserIds.has(item.uid);
     const isUpdating = updating === item.uid;
 
     return (
@@ -179,15 +199,21 @@ export function UserEventAssignment({
           <Text style={[styles.controllerEmail, { color: colors.text }]}>
             {item.email}
           </Text>
-          {isAssigned && (
+          {isAdmin ? (
+            <View style={[styles.assignedBadge, { backgroundColor: ROLE_CONFIG.admin.color }]}>
+              <Text style={styles.assignedBadgeText}>Acceso completo</Text>
+            </View>
+          ) : isAssigned ? (
             <View style={[styles.assignedBadge, { backgroundColor: colors.success }]}>
               <Text style={styles.assignedBadgeText}>Asignado</Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         <View style={styles.controllerAction}>
-          {isUpdating ? (
+          {isAdmin ? (
+            <Text style={[styles.fullAccessText, { color: ROLE_CONFIG.admin.color }]}>✓</Text>
+          ) : isUpdating ? (
             <ActivityIndicator size="small" color={colors.primary} />
           ) : (
             <Switch
@@ -290,7 +316,7 @@ export function UserEventAssignment({
       ) : (
         <SectionList
           sections={sections}
-          renderItem={renderController}
+          renderItem={renderUser}
           renderSectionHeader={renderSectionHeader}
           keyExtractor={(item) => item.uid}
           contentContainerStyle={styles.listContent}
@@ -437,6 +463,12 @@ const styles = StyleSheet.create({
   },
   controllerAction: {
     marginLeft: Spacing.md,
+    minWidth: 50,
+    alignItems: 'center',
+  },
+  fullAccessText: {
+    fontSize: FontSizes.xl,
+    fontWeight: '700',
   },
   emptyContainer: {
     flex: 1,
