@@ -132,6 +132,7 @@ const styles = StyleSheet.create({
   },
   mainContainer: {
     flexDirection: 'row',
+    alignItems: 'stretch',
   },
   mainContainerNarrow: {
     flexDirection: 'column',
@@ -149,21 +150,19 @@ const styles = StyleSheet.create({
     marginTop: -Spacing.lg,
     marginBottom: -Spacing.lg,
     marginRight: -Spacing.lg,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
     overflow: 'hidden',
   },
   developerImageDesktop: {
     width: '100%',
     height: '100%',
-    resizeMode: 'contain',
+    resizeMode: 'cover',
     borderTopRightRadius: BorderRadius.lg,
     borderBottomRightRadius: BorderRadius.lg,
   },
   developerImageMobile: {
     width: '100%',
-    height: 300,
-    resizeMode: 'cover',
+    height: 350,
+    resizeMode: 'contain',
     borderRadius: BorderRadius.md,
     marginBottom: Spacing.md,
   },
