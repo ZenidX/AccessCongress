@@ -52,14 +52,18 @@ export function AboutSection() {
         </ThemedText>
 
         <View style={styles.developerContainer}>
-          <Image source={developerImage} style={styles.developerImage} />
           <View style={styles.developerInfo}>
             <ThemedText style={styles.developerName}>Xavi Lara</ThemedText>
-            <ThemedText style={styles.developerRole}>Full Stack Developer</ThemedText>
-            <ThemedText style={[styles.infoText, { marginTop: Spacing.sm }]}>
+            <ThemedText style={styles.developerRole}>AI & IT Analyst</ThemedText>
+            <ThemedText style={styles.developerRole}>I+D+i Consultant</ThemedText>
+            <ThemedText style={styles.developerRole}>Software Architect</ThemedText>
+            <ThemedText style={styles.developerRole}>Full Stack Web Developer</ThemedText>
+            <ThemedText style={styles.developerRole}>AI & IT Teacher & Tutor</ThemedText>
+            <ThemedText style={[styles.infoText, { marginTop: Spacing.md }]}>
               zenid77@gmail.com
             </ThemedText>
           </View>
+          <Image source={developerImage} style={styles.developerImage} />
         </View>
 
         <ThemedText style={[styles.sectionHeader, { marginTop: Spacing.xxl }]}>
@@ -108,25 +112,27 @@ const styles = StyleSheet.create({
   },
   developerContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     gap: Spacing.lg,
   },
   developerImage: {
-    width: 100,
-    height: 120,
+    width: 120,
+    height: 200,
     borderRadius: BorderRadius.md,
     resizeMode: 'cover',
   },
   developerInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
   developerName: {
-    fontSize: FontSizes.lg,
+    fontSize: FontSizes.xl,
     fontWeight: 'bold',
+    marginBottom: Spacing.sm,
   },
   developerRole: {
-    fontSize: FontSizes.md,
-    opacity: 0.7,
+    fontSize: FontSizes.sm,
+    opacity: 0.8,
     marginTop: 2,
   },
 });
