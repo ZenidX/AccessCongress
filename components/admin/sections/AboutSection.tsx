@@ -8,15 +8,19 @@
  */
 
 import React from 'react';
-import { View, StyleSheet, Image } from 'react-native';
+import { View, StyleSheet, Image, useWindowDimensions } from 'react-native';
 import { ThemedText } from '@/components/themed/themed-text';
 import { Colors, BorderRadius, Spacing, Shadows, FontSizes } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 const developerImage = require('@/assets/images/developer.png');
 
+const BREAKPOINT = 600; // Width below which we switch to mobile layout
+
 export function AboutSection() {
   const colorScheme = useColorScheme();
+  const { width } = useWindowDimensions();
+  const isNarrow = width < BREAKPOINT;
 
   return (
     <View style={styles.section}>
@@ -33,53 +37,68 @@ export function AboutSection() {
           },
         ]}
       >
-        <ThemedText style={styles.sectionHeader}>
-          Impuls Educació
-        </ThemedText>
+        {/* Main layout: content left, image right (on wide screens) */}
+        <View style={[styles.mainContainer, isNarrow && styles.mainContainerNarrow]}>
+          {/* Content column */}
+          <View style={[styles.contentColumn, isNarrow && styles.contentColumnNarrow]}>
+            <ThemedText style={styles.sectionHeader}>
+              Impuls Educació
+            </ThemedText>
 
-        <ThemedText style={styles.infoText}>
-          <ThemedText style={styles.infoBold}>Organización: </ThemedText>
-          Impuls Educació es una organización dedicada a la formación y educación.
-        </ThemedText>
+            <ThemedText style={styles.infoText}>
+              <ThemedText style={styles.infoBold}>Organización: </ThemedText>
+              Impuls Educació es una organización dedicada a la formación y educación.
+            </ThemedText>
 
-        <ThemedText style={[styles.infoText, { marginTop: 15 }]}>
-          <ThemedText style={styles.infoBold}>Web: </ThemedText>
-          https://impulseducacio.org/
-        </ThemedText>
+            <ThemedText style={[styles.infoText, { marginTop: 15 }]}>
+              <ThemedText style={styles.infoBold}>Web: </ThemedText>
+              https://impulseducacio.org/
+            </ThemedText>
 
-        <ThemedText style={[styles.sectionHeader, { marginTop: Spacing.xxl }]}>
-          Desarrollador
-        </ThemedText>
+            <ThemedText style={[styles.sectionHeader, { marginTop: Spacing.xxl }]}>
+              Desarrollador
+            </ThemedText>
 
-        <View style={styles.developerContainer}>
-          <View style={styles.developerInfo}>
-            <ThemedText style={styles.developerName}>Xavi Lara</ThemedText>
-            <ThemedText style={styles.developerRole}>AI & IT Analyst</ThemedText>
-            <ThemedText style={styles.developerRole}>I+D+i Consultant</ThemedText>
-            <ThemedText style={styles.developerRole}>Software Architect</ThemedText>
-            <ThemedText style={styles.developerRole}>Full Stack Web Developer</ThemedText>
-            <ThemedText style={styles.developerRole}>AI & IT Teacher & Tutor</ThemedText>
-            <ThemedText style={[styles.infoText, { marginTop: Spacing.md }]}>
-              zenid77@gmail.com
+            {/* Mobile: Image between title and info */}
+            {isNarrow && (
+              <Image source={developerImage} style={styles.developerImageMobile} />
+            )}
+
+            <View style={styles.developerInfo}>
+              <ThemedText style={styles.developerName}>Xavi Lara</ThemedText>
+              <ThemedText style={styles.developerRole}>AI & IT Analyst</ThemedText>
+              <ThemedText style={styles.developerRole}>I+D+i Consultant</ThemedText>
+              <ThemedText style={styles.developerRole}>Software Architect</ThemedText>
+              <ThemedText style={styles.developerRole}>Full Stack Web Developer</ThemedText>
+              <ThemedText style={styles.developerRole}>AI & IT Teacher & Tutor</ThemedText>
+              <ThemedText style={[styles.infoText, { marginTop: Spacing.md }]}>
+                zenid77@gmail.com
+              </ThemedText>
+            </View>
+
+            <ThemedText style={[styles.sectionHeader, { marginTop: Spacing.xxl }]}>
+              Información Técnica
+            </ThemedText>
+
+            <ThemedText style={styles.infoText}>
+              <ThemedText style={styles.infoBold}>Versión: </ThemedText> 1.0.0
+            </ThemedText>
+
+            <ThemedText style={[styles.infoText, { marginTop: 10 }]}>
+              <ThemedText style={styles.infoBold}>Tecnologías:</ThemedText>
+              {'\n'}• React Native + Expo
+              {'\n'}• Firebase (Authentication, Firestore, Hosting)
+              {'\n'}• TypeScript
             </ThemedText>
           </View>
-          <Image source={developerImage} style={styles.developerImage} />
+
+          {/* Image column - only on wide screens */}
+          {!isNarrow && (
+            <View style={styles.imageColumn}>
+              <Image source={developerImage} style={styles.developerImageDesktop} />
+            </View>
+          )}
         </View>
-
-        <ThemedText style={[styles.sectionHeader, { marginTop: Spacing.xxl }]}>
-          Información Técnica
-        </ThemedText>
-
-        <ThemedText style={styles.infoText}>
-          <ThemedText style={styles.infoBold}>Versión: </ThemedText> 1.0.0
-        </ThemedText>
-
-        <ThemedText style={[styles.infoText, { marginTop: 10 }]}>
-          <ThemedText style={styles.infoBold}>Tecnologías:</ThemedText>
-          {'\n'}• React Native + Expo
-          {'\n'}• Firebase (Authentication, Firestore, Hosting)
-          {'\n'}• TypeScript
-        </ThemedText>
       </View>
     </View>
   );
@@ -102,6 +121,7 @@ const styles = StyleSheet.create({
   infoCard: {
     padding: Spacing.lg,
     borderRadius: BorderRadius.lg,
+    overflow: 'hidden',
   },
   infoText: {
     fontSize: FontSizes.md,
@@ -110,20 +130,42 @@ const styles = StyleSheet.create({
   infoBold: {
     fontWeight: 'bold',
   },
-  developerContainer: {
+  mainContainer: {
     flexDirection: 'row',
-    minHeight: 250,
   },
-  developerImage: {
-    width: 150,
+  mainContainerNarrow: {
+    flexDirection: 'column',
+  },
+  contentColumn: {
+    flex: 1,
+    paddingRight: Spacing.xl,
+  },
+  contentColumnNarrow: {
+    paddingRight: 0,
+  },
+  imageColumn: {
+    width: 180,
+    marginLeft: Spacing.lg,
+    marginTop: -Spacing.lg,
+    marginBottom: -Spacing.lg,
+    marginRight: -Spacing.lg,
+  },
+  developerImageDesktop: {
+    width: '100%',
     height: '100%',
-    borderRadius: BorderRadius.md,
     resizeMode: 'cover',
+    borderTopRightRadius: BorderRadius.lg,
+    borderBottomRightRadius: BorderRadius.lg,
+  },
+  developerImageMobile: {
+    width: '100%',
+    height: 300,
+    resizeMode: 'cover',
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.md,
   },
   developerInfo: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingRight: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
   developerName: {
     fontSize: FontSizes.xl,
