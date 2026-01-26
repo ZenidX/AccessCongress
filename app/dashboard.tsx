@@ -2048,10 +2048,13 @@ const styles = StyleSheet.create({
   },
   participantsTableScrollWrapper: {
     maxHeight: 400,
-    overflow: 'scroll' as const,
+    overflow: 'auto' as const,
+    // @ts-ignore - Web specific properties
+    WebkitOverflowScrolling: 'touch',
+    overscrollBehavior: 'contain',
   },
   participantsTableContainer: {
-    minWidth: 650,
+    minWidth: 600,
   },
   participantsTableHeader: {
     flexDirection: 'row',
