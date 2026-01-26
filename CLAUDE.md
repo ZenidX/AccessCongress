@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **CongressAccess** is an Expo/React Native mobile app for real-time congress access control with multi-device synchronization, designed for **Impuls Educació** (https://impulseducacio.org/). The app manages participant registration, entry/exit tracking across multiple locations (Aula Magna, Master Class, Cena), and provides a real-time dashboard for monitoring attendance.
 
+The system is **multi-tenant**: organizations can have multiple events, each with their own participants, controllers, and access logs.
+
 ### Branding
 
 The app follows the **Impuls Educació** brand identity:
@@ -16,35 +18,54 @@ The app follows the **Impuls Educació** brand identity:
 
 ## Common Commands
 
-### Development
+### Development (Mobile App)
 ```bash
-# Install dependencies
-npm install
-
-# Start development server
-npm start
-# or
-npx expo start
-
-# Run on specific platform
-npm run android    # Android emulator
-npm run ios        # iOS simulator
-npm run web        # Web browser
+npm install              # Install dependencies
+npm start                # Start Expo dev server (or: npx expo start)
+npm run android          # Run on Android emulator
+npm run ios              # Run on iOS simulator
+npm run web              # Run in web browser
+npm run lint             # Run ESLint
 ```
 
-### Code Quality
+### Cloud Functions
 ```bash
-# Run linter
-npm run lint
+cd functions
+npm install              # Install functions dependencies
+npm run build            # Compile TypeScript
+npm run serve            # Build and start emulators
+npm run deploy           # Deploy functions to Firebase
+npm run logs             # View function logs
 ```
 
-### Project Reset
+### Firebase Deployment
 ```bash
-# Reset to blank project (moves starter code to app-example/)
-npm run reset-project
+firebase deploy --only firestore:rules    # Deploy security rules
+firebase deploy --only functions          # Deploy Cloud Functions
+firebase deploy --only hosting            # Deploy web build
+firebase deploy                           # Deploy everything
 ```
 
 ## Architecture Overview
+
+### Multi-Tenant Hierarchy
+
+```
+super_admin (zenid77@gmail.com)
+└── organizations/{orgId}
+    └── admin_responsable (organization owner)
+        ├── admin (manages controllers)
+        │   └── controlador (scans QR codes)
+        └── events/{eventId}
+            ├── participants/{dni}
+            └── access_logs/{logId}
+```
+
+**Role hierarchy** (`types/user.ts`):
+- `super_admin`: Full system access (hardcoded email)
+- `admin_responsable`: Organization owner, can create admins/controllers
+- `admin`: Can create controllers, manage events in their org
+- `controlador`: Can only scan QR and view dashboard for assigned events
 
 ### Core Data Flow
 
@@ -53,7 +74,7 @@ npm run reset-project
 3. **Validation** → Business rules checked (`utils/validations.ts`)
 4. **State Update** → Firestore document updated (`services/participantService.ts`)
 5. **Real-time Sync** → All devices receive update via Firestore subscriptions
-6. **Access Logging** → All attempts logged to `access_logs` collection
+6. **Access Logging** → All attempts logged to `events/{eventId}/access_logs`
 
 ### Dashboard as Control Center
 
@@ -104,18 +125,28 @@ All validation logic centralized in `utils/validations.ts`.
 
 ### Firebase Structure
 
-**Collections:**
-- `participants/{dni}`: Participant documents
-  - `dni`: Primary key (string)
-  - `nombre`: Full name
-  - `permisos`: Object with `aula_magna`, `master_class`, `cena` booleans
-  - `estado`: Object tracking registration and current locations
-  - `timestamp_registro`: Unix timestamp of initial registration
-  - `ultima_actualizacion`: Unix timestamp of last update
+**Collections (multi-tenant):**
+```
+/organizations/{orgId}              # Organization documents
+/users/{uid}                        # User accounts with role & orgId
+/events/{eventId}                   # Event documents with organizationId
+  /participants/{dni}               # Participant subcollection per event
+  /access_logs/{logId}              # Access logs subcollection per event
+  /emailTemplates/{templateId}      # Email templates per event
+  /emailLogs/{logId}                # Email send logs per event
+```
 
-- `access_logs/{id}`: Access attempt logs
-  - Auto-generated IDs
-  - Contains dni, nombre, modo, direccion, timestamp, operador, exito, mensaje
+**Legacy collections** (root level, for backward compatibility):
+- `/participants/{dni}` - Used when no eventId provided
+- `/access_logs/{id}` - Used when no eventId provided
+
+**Participant document fields:**
+- `dni`: Primary key (string)
+- `nombre`: Full name
+- `email`, `telefono`, `escuela`, `cargo`: Optional profile fields
+- `permisos`: Object with `aula_magna`, `master_class`, `cena` booleans
+- `estado`: Object tracking registration and current locations
+- `eventId`: Reference to parent event
 
 **Real-time subscriptions:**
 - `subscribeToLocationParticipants()`: Listens to participants in a specific location
@@ -143,18 +174,22 @@ All types defined in `types/participant.ts`:
 - `ValidationResult`: Return type from validation functions
 - `AccessLog`: Structure for access attempt logs
 
-### CSV Import Format
+### Import Formats (CSV/Excel)
 
-When importing participants via admin panel, CSV must follow this format:
-```csv
-DNI,Nombre,MasterClass,Cena
-12345678A,Juan Pérez,Si,Si
-87654321B,María García,No,Si
-```
+Participants can be imported via CSV or Excel (.xlsx). The import function (`services/participantService.ts`) uses case-insensitive, fuzzy column matching:
 
-- All participants get `permisos.aula_magna = true` automatically
-- MasterClass/Cena: accepts "Si"/"No" or "1"/"0" (case-insensitive)
-- Handled in `services/participantService.ts::importParticipantsFromCSV()`
+**Required columns:** `DNI`, `Nombre` (or `Nom` + `Cognoms`)
+
+**Optional columns:** `Mail`, `Telèfon`, `Entitat/Institució`, `Tipus d'Escola`, `Lloc/Responsabilitat`, `Acceso`, `MasterClass`, `Cena`, `Ha Pagat?`
+
+**Import modes:**
+- `merge` (default): Add new participants, update existing by DNI
+- `replace`: Delete all existing participants first, then import
+
+**Permission logic:**
+- `permisos.aula_magna` = true if `Acceso` contains "presencial"
+- `permisos.master_class` = true if MasterClass is "Si"/"Sí"/"1"/"yes"/"true"
+- `permisos.cena` = true if Cena is "Si"/"Sí"/"1"/"yes"/"true"
 
 ## Firebase Configuration
 
@@ -164,23 +199,47 @@ The Firebase config is in `config/firebase.ts`. For new environments:
 3. Update `firebaseConfig` object in `config/firebase.ts`
 4. Deploy Firestore rules with `firebase deploy --only firestore:rules`
 
-### Security Rules (firestore.rules)
+### Cloud Functions (`functions/src/`)
 
-The Firestore security rules are **production-ready** with comprehensive access control:
+Cloud Functions handle server-side operations requiring Firebase Admin SDK:
 
-- **Role-based access**: 4-level hierarchy (super_admin, admin_responsable, admin, controlador)
-- **Organization isolation**: Users can only access data within their organization
-- **Event-level permissions**: Controllers only access their assigned events
-- **Immutable audit logs**: `access_logs` and `emailLogs` cannot be modified or deleted
-- **Default deny**: All unspecified paths are blocked
+**Email Functions:**
+- `sendSingleEmail`: Send individual email with QR code to participant (uses Resend)
+- `sendBulkEmail`: Batch email sending with progress tracking
 
-Key rules:
-- Super admin is hardcoded by email (`zenid77@gmail.com`)
-- Admin roles can manage events/participants in their organization
-- Controllers can update participant status (for scanning) but not delete
-- Users cannot change their own role or organization
+**User Management:**
+- `createUser`: Create user account with role validation
+- `deleteUser`: Delete user and clean up references
+- `updateUserRole`: Change user role with hierarchy enforcement
 
-Legacy collections (`/participants`, `/access_logs` at root level) have more permissive rules for backward compatibility.
+**Custom Claims Sync:**
+- `syncUserClaims`: Triggered on user document changes, syncs role/orgId/events to JWT
+- `refreshUserClaims`: Manually refresh a user's custom claims
+- `migrateUserClaims`: One-time migration for existing users
+
+**Event Sync:**
+- `onEventCreated`: Auto-assign new events to organization controllers
+- `onEventDeleted`: Clean up event references from user assignments
+
+### Security Rules & Custom Claims
+
+Security rules (`firestore.rules`) use **JWT Custom Claims** for performant authorization:
+
+```javascript
+// Custom Claims set by Cloud Functions:
+request.auth.token.role    // 'super_admin' | 'admin_responsable' | 'admin' | 'controlador'
+request.auth.token.orgId   // Organization ID
+request.auth.token.events  // Array of assigned event IDs
+```
+
+**Key rule behaviors:**
+- Super admin hardcoded by email (`zenid77@gmail.com`)
+- Organization isolation via `token.orgId`
+- Controllers restricted to their `token.events` array
+- Audit logs (`access_logs`, `emailLogs`) are immutable (no update/delete)
+- Default deny for all unspecified paths
+
+Legacy collections (`/participants`, `/access_logs` at root level) have permissive rules for backward compatibility.
 
 ## Key Implementation Notes
 
@@ -221,6 +280,19 @@ This ensures idempotency and proper audit trail.
 - User must grant camera permissions on first use
 - No fallback; camera is essential for QR scanning
 
+## Services Layer (`services/`)
+
+Client-side services for Firestore operations:
+
+- **participantService.ts**: CRUD for participants, import/export, real-time subscriptions, access logging
+- **eventService.ts**: Event CRUD, status management
+- **userService.ts**: User queries and updates (auth via Cloud Functions)
+- **organizationService.ts**: Organization CRUD
+- **emailTemplateService.ts**: Email template management
+- **emailSendService.ts**: Client-side email sending via Cloud Functions
+
+All services accept optional `eventId` parameter - when omitted, they use legacy root-level collections.
+
 ## Common Modification Patterns
 
 ### Adding a New Access Mode
@@ -241,49 +313,23 @@ Dashboard uses Firestore subscriptions. To add new views:
 2. Return `Unsubscribe` function for cleanup
 3. Call in `useEffect` with cleanup on unmount
 
+### Adding a New Cloud Function
+1. Create function file in `functions/src/functions/`
+2. Export from `functions/src/index.ts`
+3. Deploy with `cd functions && npm run deploy`
+4. If callable from client, add client-side wrapper in `services/`
+
 ## Platform-Specific Notes
 
-- **iOS**: Requires `expo-camera` permissions in Info.plist (handled by Expo)
-- **Android**: Requires `CAMERA` permission (handled by Expo)
+- **iOS/Android**: Camera permissions handled by Expo (Info.plist / AndroidManifest)
 - **Web**: Camera access via browser API; QR scanning may have limited functionality
-- App primarily designed for **mobile devices** (iOS/Android)
+- App primarily designed for mobile devices
 
-## Branding Components
+## Theme & Styling
 
-### ImpulsLogo Component
-Location: `components/impuls-logo.tsx`
-
-Reusable component for displaying the Impuls Educació logo:
-```tsx
-import { ImpulsLogo } from '@/components/impuls-logo';
-
-// Usage
-<ImpulsLogo size="large" /> // small | medium | large
-```
-
-The logo is displayed on:
-- Home screen (index.tsx) - large size
-- Dashboard (dashboard.tsx) - medium size
-- Admin panel (admin.tsx) - medium size
-
-Logo source: `https://impulseducacio.org/wp-content/uploads/2020/02/logo-web-impuls.png`
-
-### Theme Colors
-All Impuls Educació brand colors are defined in `constants/theme.ts`:
-- Primary: `#00a4e1` (Impuls Blue)
-- Secondary: `#ffaf00` (Impuls Orange)
-- Purple: `#9b51e0` (Impuls Purple - used for Cena)
-- Accent: `#212934` (Impuls Navy)
-- Text: `#48626f` (Impuls Gray)
-- Light Background: `#f6f6f6`
-
-Access colors via: `Colors.light.primary` or `Colors.dark.primary`
+Brand colors defined in `constants/theme.ts` - access via `Colors.light.primary` etc.
+Logo component: `components/visuals/impuls-logo.tsx` with size prop (small/medium/large)
 
 ## External Tools
 
-- `tools/generate-qr.html`: Standalone HTML page for generating participant QR codes (works offline, no dependencies)
-
-## Documentation Files
-
-- `README_APP.md`: Comprehensive user guide in Spanish (features, usage, troubleshooting)
-- `INSTRUCCIONES_SETUP.md`: Step-by-step setup guide in Spanish (Firebase config, deployment checklist)
+- `tools/generate-qr.html`: Standalone HTML for generating participant QR codes (works offline)
