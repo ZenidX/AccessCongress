@@ -138,6 +138,7 @@ export default function DashboardScreen() {
 
   // Últimos accesos del modo seleccionado
   const [recentLogs, setRecentLogs] = useState<AccessLog[]>([]);
+  const [logsSearchText, setLogsSearchText] = useState('');
 
   // Recuentos totales de participantes por permiso
   const [potentialCounts, setPotentialCounts] = useState({
@@ -718,6 +719,25 @@ export default function DashboardScreen() {
                   {selectedMode === 'registro' ? 'Últimos registros' : 'Últimos accesos'}
                 </Text>
 
+                {/* Buscador de logs */}
+                <View style={[styles.logsSearchContainer, { backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : '#fff', borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.2)' : '#ddd' }]}>
+                  <Text style={styles.logsSearchIcon}>🔍</Text>
+                  <TextInput
+                    style={[styles.logsSearchInput, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}
+                    placeholder="Buscar por nombre, DNI, correo..."
+                    placeholderTextColor={colorScheme === 'dark' ? '#888' : '#999'}
+                    value={logsSearchText}
+                    onChangeText={setLogsSearchText}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {logsSearchText.length > 0 && (
+                    <TouchableOpacity onPress={() => setLogsSearchText('')}>
+                      <Text style={styles.logsSearchClear}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
                 {recentLogs.length === 0 ? (
                   <View style={styles.emptyContainer}>
                     <Text style={styles.emptyIcon}>📋</Text>
@@ -741,7 +761,16 @@ export default function DashboardScreen() {
                     </View>
 
                     {/* Filas de tabla */}
-                    {recentLogs.map((log, index) => (
+                    {recentLogs
+                      .filter(log => {
+                        if (!logsSearchText.trim()) return true;
+                        const searchLower = logsSearchText.toLowerCase().trim();
+                        const searchFields = [
+                          log.nombre, log.dni, log.email, log.escuela, log.cargo, log.mensaje
+                        ].filter(Boolean).join(' ').toLowerCase();
+                        return searchFields.includes(searchLower);
+                      })
+                      .map((log, index) => (
                       <View
                         key={`${log.dni}-${log.timestamp}-${index}`}
                         style={[
@@ -998,6 +1027,25 @@ export default function DashboardScreen() {
                   {selectedMode === 'registro' ? 'Últimos registros' : 'Últimos accesos'}
                 </ThemedText>
 
+                {/* Buscador de logs */}
+                <View style={[styles.logsSearchContainer, { backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : '#fff', borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.2)' : '#ddd' }]}>
+                  <Text style={styles.logsSearchIcon}>🔍</Text>
+                  <TextInput
+                    style={[styles.logsSearchInput, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}
+                    placeholder="Buscar por nombre, DNI, correo..."
+                    placeholderTextColor={colorScheme === 'dark' ? '#888' : '#999'}
+                    value={logsSearchText}
+                    onChangeText={setLogsSearchText}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {logsSearchText.length > 0 && (
+                    <TouchableOpacity onPress={() => setLogsSearchText('')}>
+                      <Text style={styles.logsSearchClear}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
                 {recentLogs.length === 0 ? (
                   <View style={styles.emptyContainer}>
                     <Text style={styles.emptyIcon}>📋</Text>
@@ -1009,7 +1057,16 @@ export default function DashboardScreen() {
                   </View>
                 ) : (
                   <View style={styles.logsContainer}>
-                    {recentLogs.map((log, index) => (
+                    {recentLogs
+                      .filter(log => {
+                        if (!logsSearchText.trim()) return true;
+                        const searchLower = logsSearchText.toLowerCase().trim();
+                        const searchFields = [
+                          log.nombre, log.dni, log.email, log.escuela, log.cargo, log.mensaje
+                        ].filter(Boolean).join(' ').toLowerCase();
+                        return searchFields.includes(searchLower);
+                      })
+                      .map((log, index) => (
                       <View
                         key={`${log.dni}-${log.timestamp}-${index}`}
                         style={[
@@ -2169,5 +2226,28 @@ const styles = StyleSheet.create({
   modalResultsCount: {
     fontSize: 12,
     textAlign: 'right',
+  },
+  // Buscador de logs
+  logsSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  logsSearchIcon: {
+    fontSize: 14,
+    marginRight: Spacing.xs,
+  },
+  logsSearchInput: {
+    flex: 1,
+    paddingVertical: Spacing.xs,
+    fontSize: 13,
+  },
+  logsSearchClear: {
+    fontSize: 14,
+    color: '#999',
+    padding: Spacing.xs,
   },
 });
