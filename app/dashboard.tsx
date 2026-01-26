@@ -1247,15 +1247,24 @@ export default function DashboardScreen() {
               </Text>
             </View>
           ) : (
-            <ScrollView style={styles.participantsModalScroll}>
-              {/* Tabla header */}
-              <View style={[styles.participantsTableHeader, { backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : '#f5f5f5' }]}>
-                <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellNombre, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Nombre</Text>
-                <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellDni, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>DNI</Text>
-                <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellEmail, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Correo</Text>
-                <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellEntidad, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Entidad</Text>
-                <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellUbicacion, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Ubicación</Text>
-              </View>
+            <ScrollView
+              style={styles.participantsModalScroll}
+              showsVerticalScrollIndicator={true}
+            >
+              <ScrollView
+                horizontal={true}
+                showsHorizontalScrollIndicator={true}
+                contentContainerStyle={styles.participantsTableHorizontalScroll}
+              >
+                <View style={styles.participantsTableContainer}>
+                  {/* Tabla header */}
+                  <View style={[styles.participantsTableHeader, { backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : '#f5f5f5' }]}>
+                    <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellNombre, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Nombre</Text>
+                    <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellDni, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>DNI</Text>
+                    <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellEmail, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Correo</Text>
+                    <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellEntidad, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Entidad</Text>
+                    <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellUbicacion, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Ubicación</Text>
+                  </View>
 
               {/* Tabla rows */}
               {participants
@@ -1338,6 +1347,8 @@ export default function DashboardScreen() {
                   </View>
                 </View>
               ))}
+                </View>
+              </ScrollView>
             </ScrollView>
           )}
         </View>
@@ -2046,6 +2057,12 @@ const styles = StyleSheet.create({
   },
   participantsModalScroll: {
     maxHeight: 500,
+  },
+  participantsTableHorizontalScroll: {
+    flexGrow: 1,
+  },
+  participantsTableContainer: {
+    minWidth: 700,
   },
   participantsTableHeader: {
     flexDirection: 'row',
