@@ -174,6 +174,9 @@ export function InlineCameraScanner({ onScanResult }: InlineCameraScannerProps) 
       // Validate access
       const validacion = validateAccess(participante, modo, direccion);
 
+      // Para registro, la dirección no aplica
+      const direccionParaLog = modo === 'registro' ? null : direccion;
+
       if (validacion.valido && participante) {
         await updateParticipantStatus(dni, modo, direccion, currentEvent?.id);
 
@@ -181,7 +184,7 @@ export function InlineCameraScanner({ onScanResult }: InlineCameraScannerProps) 
           dni,
           participante.nombre,
           modo,
-          direccion,
+          direccionParaLog,
           true,
           validacion.mensaje,
           operador,
@@ -198,7 +201,7 @@ export function InlineCameraScanner({ onScanResult }: InlineCameraScannerProps) 
           dni,
           participante?.nombre || 'Desconocido',
           modo,
-          direccion,
+          direccionParaLog,
           false,
           validacion.mensaje,
           operador,

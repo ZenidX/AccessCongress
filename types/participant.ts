@@ -4,7 +4,7 @@
 
 export type AccessMode = 'registro' | 'aula_magna' | 'master_class' | 'cena';
 
-export type AccessDirection = 'entrada' | 'salida';
+export type AccessDirection = 'entrada' | 'salida' | null;
 
 export interface ParticipantPermissions {
   aula_magna: boolean;      // Todos tienen acceso

@@ -295,6 +295,9 @@ export default function ScannerScreen() {
       // Aplica reglas de negocio: permisos, registro previo, estado de ubicación
       const validacion = validateAccess(participante, modo, direccion);
 
+      // Para registro, la dirección no aplica
+      const direccionParaLog = modo === 'registro' ? null : direccion;
+
       if (validacion.valido && participante) {
         // 6a. ACCESO VÁLIDO
         // Actualizar estado del participante (registrado, en_aula_magna, etc.)
@@ -305,7 +308,7 @@ export default function ScannerScreen() {
           dni,
           participante.nombre,
           modo,
-          direccion,
+          direccionParaLog,
           true,
           validacion.mensaje,
           operador,
@@ -323,7 +326,7 @@ export default function ScannerScreen() {
           dni,
           participante?.nombre || 'Desconocido',
           modo,
-          direccion,
+          direccionParaLog,
           false,
           validacion.mensaje,
           operador,

@@ -42,8 +42,8 @@ export const Colors = {
     modeAulaMagna: impulsPurple,    // Lila para aula magna
     modeMasterClass: impulsBlue,    // Azul para master class
     modeCena: impulsOrange,         // Naranja para cena
-    directionEntrada: impulsGray,   // Gris corporativo para entrada
-    directionSalida: impulsGray,    // Gris corporativo para salida
+    directionEntrada: impulsGreen,  // Verde para entrada
+    directionSalida: impulsRed,     // Rojo para salida
   },
   dark: {
     text: '#ECEDEE',
@@ -66,8 +66,8 @@ export const Colors = {
     modeAulaMagna: impulsPurple,
     modeMasterClass: impulsBlue,
     modeCena: impulsOrange,
-    directionEntrada: '#7a8f9b',    // Gris corporativo más claro para dark mode
-    directionSalida: '#7a8f9b',     // Gris corporativo más claro para dark mode
+    directionEntrada: '#4db6ac',    // Verde más claro para dark mode
+    directionSalida: '#ff7961',     // Rojo más claro para dark mode
   },
 };
 

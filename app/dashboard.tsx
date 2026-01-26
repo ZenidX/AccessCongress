@@ -757,16 +757,28 @@ export default function DashboardScreen() {
                           {log.cargo || '-'}
                         </Text>
                         <View style={[styles.webTableCellDir]}>
-                          {log.direccion && (
-                            <View style={[
-                              styles.logDirectionBadge,
-                              { backgroundColor: log.direccion === 'entrada'
+                          {log.modo === 'registro' ? (
+                            <View style={{
+                              backgroundColor: Colors.light.modeRegistro,
+                              paddingHorizontal: 8,
+                              paddingVertical: 4,
+                              borderRadius: 4,
+                            }}>
+                              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>
+                                Registrado
+                              </Text>
+                            </View>
+                          ) : log.direccion && (
+                            <View style={{
+                              backgroundColor: log.direccion === 'entrada'
                                 ? Colors.light.directionEntrada
-                                : Colors.light.directionSalida
-                              }
-                            ]}>
-                              <Text style={styles.logDirectionText}>
-                                {log.direccion === 'entrada' ? '⬇️' : '⬆️'}
+                                : Colors.light.directionSalida,
+                              paddingHorizontal: 8,
+                              paddingVertical: 4,
+                              borderRadius: 4,
+                            }}>
+                              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>
+                                {log.direccion === 'entrada' ? 'Entrada' : 'Salida'}
                               </Text>
                             </View>
                           )}
@@ -1026,16 +1038,28 @@ export default function DashboardScreen() {
                           )}
                         </View>
                         <View style={styles.logMeta}>
-                          {log.direccion && (
-                            <View style={[
-                              styles.logDirectionBadge,
-                              { backgroundColor: log.direccion === 'entrada'
+                          {log.modo === 'registro' ? (
+                            <View style={{
+                              backgroundColor: Colors.light.modeRegistro,
+                              paddingHorizontal: 8,
+                              paddingVertical: 4,
+                              borderRadius: 4,
+                            }}>
+                              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>
+                                Registrado
+                              </Text>
+                            </View>
+                          ) : log.direccion && (
+                            <View style={{
+                              backgroundColor: log.direccion === 'entrada'
                                 ? Colors.light.directionEntrada
-                                : Colors.light.directionSalida
-                              }
-                            ]}>
-                              <Text style={styles.logDirectionText}>
-                                {log.direccion === 'entrada' ? '⬇️' : '⬆️'}
+                                : Colors.light.directionSalida,
+                              paddingHorizontal: 8,
+                              paddingVertical: 4,
+                              borderRadius: 4,
+                            }}>
+                              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>
+                                {log.direccion === 'entrada' ? 'Entrada' : 'Salida'}
                               </Text>
                             </View>
                           )}
@@ -1640,6 +1664,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: FontSizes.sm,
     color: '#333',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(0,0,0,0.1)',
+    paddingRight: Spacing.sm,
   },
   webTableRow: {
     flexDirection: 'row',
@@ -1652,11 +1679,14 @@ const styles = StyleSheet.create({
   webTableCell: {
     fontSize: FontSizes.sm,
     color: '#000',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(0,0,0,0.1)',
+    paddingRight: Spacing.sm,
   },
   // Anchos de columnas de tabla
   webTableCellNombre: {
-    flex: 2,
-    minWidth: 120,
+    flex: 1.5,
+    minWidth: 100,
   },
   webTableCellDni: {
     flex: 1,
@@ -1667,20 +1697,23 @@ const styles = StyleSheet.create({
     minWidth: 140,
   },
   webTableCellEntidad: {
-    flex: 1.5,
-    minWidth: 100,
+    flex: 1,
+    minWidth: 80,
   },
   webTableCellCargo: {
     flex: 1,
     minWidth: 80,
   },
   webTableCellDir: {
-    width: 40,
+    width: 90,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(0,0,0,0.1)',
   },
   webTableCellHora: {
-    width: 50,
+    width: 70,
     textAlign: 'right',
+    borderRightWidth: 0,
   },
 });
