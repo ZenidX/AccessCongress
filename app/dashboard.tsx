@@ -117,6 +117,9 @@ export default function DashboardScreen() {
   // Estado para controlar si el selector de modo está expandido (solo móvil)
   const [modeExpanded, setModeExpanded] = useState(false);
 
+  // Estado para mostrar modal de participantes actuales
+  const [showParticipantsModal, setShowParticipantsModal] = useState(false);
+
   // Estado para el último resultado del scanner inline (web)
   const [lastScanResult, setLastScanResult] = useState<{
     success: boolean;
@@ -665,8 +668,12 @@ export default function DashboardScreen() {
                   {selectedModeInfo?.icono} {selectedModeInfo?.titulo}
                 </ThemedText>
 
-                {/* Indicadores */}
-                <View style={styles.indicatorsRow}>
+                {/* Indicadores - Clickeable para ver lista de participantes */}
+                <TouchableOpacity
+                  style={styles.indicatorsRow}
+                  onPress={() => setShowParticipantsModal(true)}
+                  activeOpacity={0.8}
+                >
                   <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
                     <Text style={styles.indicatorNumber}>{participants.length}</Text>
                     <Text style={styles.indicatorLabel}>
@@ -696,7 +703,10 @@ export default function DashboardScreen() {
                     <Text style={styles.indicatorNumber}>{potentialCounts[selectedMode]}</Text>
                     <Text style={styles.indicatorLabel}>Previstos</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
+                <Text style={[styles.indicatorsHint, { color: colorScheme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)' }]}>
+                  Toca para ver lista de participantes
+                </Text>
               </View>
 
               {/* Tabla de logs con scroll */}
@@ -940,7 +950,12 @@ export default function DashboardScreen() {
                 {selectedModeInfo?.icono} {selectedModeInfo?.titulo}
               </ThemedText>
 
-              <View style={styles.indicatorsRow}>
+              {/* Indicadores - Clickeable para ver lista de participantes */}
+              <TouchableOpacity
+                style={styles.indicatorsRow}
+                onPress={() => setShowParticipantsModal(true)}
+                activeOpacity={0.8}
+              >
                 <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
                   <Text style={styles.indicatorNumber}>{participants.length}</Text>
                   <Text style={styles.indicatorLabel}>
@@ -970,7 +985,10 @@ export default function DashboardScreen() {
                   <Text style={styles.indicatorNumber}>{potentialCounts[selectedMode]}</Text>
                   <Text style={styles.indicatorLabel}>Previstos</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
+              <Text style={[styles.indicatorsHint, { color: colorScheme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)' }]}>
+                Toca para ver lista de participantes
+              </Text>
 
               <View style={styles.recentAccessSection}>
                 <ThemedText style={styles.subsectionTitle}>
@@ -1081,6 +1099,103 @@ export default function DashboardScreen() {
     <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md }]}>
         <BackButton style={{ margin: 0 }} />
     </View>
+
+    {/* Modal de participantes actuales */}
+    <Modal
+      visible={showParticipantsModal}
+      animationType="fade"
+      transparent={true}
+      onRequestClose={() => setShowParticipantsModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[
+          styles.participantsModalContent,
+          {
+            backgroundColor: colorScheme === 'dark' ? Colors.dark.cardBackground : '#fff',
+            maxWidth: isWeb && isWideScreen ? 900 : '95%',
+          }
+        ]}>
+          {/* Header del modal */}
+          <View style={[styles.participantsModalHeader, { backgroundColor: selectedModeInfo?.color }]}>
+            <Text style={styles.participantsModalTitle}>
+              {selectedModeInfo?.icono} {selectedMode === 'registro' ? 'Participantes registrados' : `En ${selectedModeInfo?.titulo}`}
+            </Text>
+            <Text style={styles.participantsModalCount}>
+              {participants.length} {participants.length === 1 ? 'participante' : 'participantes'}
+            </Text>
+            <TouchableOpacity
+              style={styles.participantsModalClose}
+              onPress={() => setShowParticipantsModal(false)}
+            >
+              <Text style={styles.participantsModalCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Contenido del modal */}
+          {participants.length === 0 ? (
+            <View style={styles.participantsModalEmpty}>
+              <Text style={styles.participantsModalEmptyIcon}>📋</Text>
+              <Text style={[styles.participantsModalEmptyText, { color: colorScheme === 'dark' ? '#ccc' : '#666' }]}>
+                {selectedMode === 'registro'
+                  ? 'No hay participantes registrados'
+                  : `No hay nadie en ${selectedModeInfo?.titulo}`}
+              </Text>
+            </View>
+          ) : (
+            <ScrollView style={styles.participantsModalScroll}>
+              {/* Tabla header */}
+              <View style={[styles.participantsTableHeader, { backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : '#f5f5f5' }]}>
+                <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellNombre, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Nombre</Text>
+                <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellDni, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>DNI</Text>
+                <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellEmail, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Correo</Text>
+                <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellEntidad, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Entidad</Text>
+              </View>
+
+              {/* Tabla rows */}
+              {participants.map((participant, index) => (
+                <View
+                  key={participant.dni}
+                  style={[
+                    styles.participantsTableRow,
+                    {
+                      backgroundColor: index % 2 === 0
+                        ? (colorScheme === 'dark' ? 'transparent' : '#fff')
+                        : (colorScheme === 'dark' ? 'rgba(255,255,255,0.05)' : '#fafafa'),
+                      borderBottomColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                    }
+                  ]}
+                >
+                  <Text
+                    style={[styles.participantsTableCell, styles.participantsTableCellNombre, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}
+                    numberOfLines={1}
+                  >
+                    {participant.nombre}
+                  </Text>
+                  <Text
+                    style={[styles.participantsTableCell, styles.participantsTableCellDni, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}
+                    numberOfLines={1}
+                  >
+                    {participant.dni}
+                  </Text>
+                  <Text
+                    style={[styles.participantsTableCell, styles.participantsTableCellEmail, { color: colorScheme === 'dark' ? '#ddd' : '#333' }]}
+                    numberOfLines={1}
+                  >
+                    {participant.email || '-'}
+                  </Text>
+                  <Text
+                    style={[styles.participantsTableCell, styles.participantsTableCellEntidad, { color: colorScheme === 'dark' ? '#ddd' : '#333' }]}
+                    numberOfLines={1}
+                  >
+                    {participant.entitat || participant.escuela || '-'}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      </View>
+    </Modal>
   </ThemedView>
   );
 }
@@ -1715,5 +1830,112 @@ const styles = StyleSheet.create({
     width: 70,
     textAlign: 'right',
     borderRightWidth: 0,
+  },
+  // Hint para indicadores clickeables
+  indicatorsHint: {
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: -Spacing.sm,
+    marginBottom: Spacing.md,
+    opacity: 0.8,
+  },
+  // Modal de participantes
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.md,
+  },
+  participantsModalContent: {
+    width: '100%',
+    maxHeight: '85%',
+    borderRadius: BorderRadius.lg,
+    overflow: 'hidden',
+    ...Shadows.strong,
+  },
+  participantsModalHeader: {
+    padding: Spacing.md,
+    paddingRight: 50,
+    position: 'relative',
+  },
+  participantsModalTitle: {
+    fontSize: FontSizes.lg,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  participantsModalCount: {
+    fontSize: FontSizes.sm,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 4,
+  },
+  participantsModalClose: {
+    position: 'absolute',
+    right: Spacing.sm,
+    top: Spacing.sm,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  participantsModalCloseText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  participantsModalEmpty: {
+    padding: Spacing.xl,
+    alignItems: 'center',
+  },
+  participantsModalEmptyIcon: {
+    fontSize: 48,
+    marginBottom: Spacing.md,
+  },
+  participantsModalEmptyText: {
+    fontSize: FontSizes.md,
+    textAlign: 'center',
+  },
+  participantsModalScroll: {
+    maxHeight: 500,
+  },
+  participantsTableHeader: {
+    flexDirection: 'row',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  participantsTableHeaderCell: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  participantsTableRow: {
+    flexDirection: 'row',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  participantsTableCell: {
+    fontSize: 13,
+    paddingRight: Spacing.xs,
+  },
+  participantsTableCellNombre: {
+    flex: 2,
+    minWidth: 120,
+  },
+  participantsTableCellDni: {
+    flex: 1,
+    minWidth: 80,
+  },
+  participantsTableCellEmail: {
+    flex: 2,
+    minWidth: 120,
+  },
+  participantsTableCellEntidad: {
+    flex: 1.5,
+    minWidth: 100,
   },
 });
