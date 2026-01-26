@@ -1149,6 +1149,7 @@ export default function DashboardScreen() {
                 <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellDni, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>DNI</Text>
                 <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellEmail, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Correo</Text>
                 <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellEntidad, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Entidad</Text>
+                <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellUbicacion, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Ubicación</Text>
               </View>
 
               {/* Tabla rows */}
@@ -1189,6 +1190,28 @@ export default function DashboardScreen() {
                   >
                     {participant.entitat || participant.escuela || '-'}
                   </Text>
+                  <View style={[styles.participantsTableCell, styles.participantsTableCellUbicacion]}>
+                    <View style={styles.ubicacionBadgesRow}>
+                      {participant.estado?.en_aula_magna && (
+                        <View style={[styles.ubicacionBadge, { backgroundColor: Colors.light.modeAulaMagna }]}>
+                          <Text style={styles.ubicacionBadgeText}>Aula</Text>
+                        </View>
+                      )}
+                      {participant.estado?.en_master_class && (
+                        <View style={[styles.ubicacionBadge, { backgroundColor: Colors.light.modeMasterClass }]}>
+                          <Text style={styles.ubicacionBadgeText}>MC</Text>
+                        </View>
+                      )}
+                      {participant.estado?.en_cena && (
+                        <View style={[styles.ubicacionBadge, { backgroundColor: Colors.light.modeCena }]}>
+                          <Text style={styles.ubicacionBadgeText}>Cena</Text>
+                        </View>
+                      )}
+                      {!participant.estado?.en_aula_magna && !participant.estado?.en_master_class && !participant.estado?.en_cena && (
+                        <Text style={{ color: colorScheme === 'dark' ? '#666' : '#999', fontSize: 11 }}>-</Text>
+                      )}
+                    </View>
+                  </View>
                 </View>
               ))}
             </ScrollView>
@@ -1937,5 +1960,26 @@ const styles = StyleSheet.create({
   participantsTableCellEntidad: {
     flex: 1.5,
     minWidth: 100,
+  },
+  participantsTableCellUbicacion: {
+    flex: 1.5,
+    minWidth: 110,
+    justifyContent: 'center',
+  },
+  ubicacionBadgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    alignItems: 'center',
+  },
+  ubicacionBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  ubicacionBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
   },
 });
