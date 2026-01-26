@@ -22,6 +22,7 @@ import {
   Platform,
   Modal,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -119,6 +120,8 @@ export default function DashboardScreen() {
 
   // Estado para mostrar modal de participantes actuales
   const [showParticipantsModal, setShowParticipantsModal] = useState(false);
+  const [modalSearchText, setModalSearchText] = useState('');
+  const [modalFilterMode, setModalFilterMode] = useState<AccessMode | 'todos'>('todos');
 
   // Estado para el último resultado del scanner inline (web)
   const [lastScanResult, setLastScanResult] = useState<{
@@ -1116,19 +1119,121 @@ export default function DashboardScreen() {
           }
         ]}>
           {/* Header del modal */}
-          <View style={[styles.participantsModalHeader, { backgroundColor: selectedModeInfo?.color }]}>
+          <View style={[styles.participantsModalHeader, { backgroundColor: Colors.light.primary }]}>
             <Text style={styles.participantsModalTitle}>
-              {selectedModeInfo?.icono} {selectedMode === 'registro' ? 'Participantes registrados' : `En ${selectedModeInfo?.titulo}`}
-            </Text>
-            <Text style={styles.participantsModalCount}>
-              {participants.length} {participants.length === 1 ? 'participante' : 'participantes'}
+              📋 Lista de Participantes
             </Text>
             <TouchableOpacity
               style={styles.participantsModalClose}
-              onPress={() => setShowParticipantsModal(false)}
+              onPress={() => {
+                setShowParticipantsModal(false);
+                setModalSearchText('');
+                setModalFilterMode('todos');
+              }}
             >
               <Text style={styles.participantsModalCloseText}>✕</Text>
             </TouchableOpacity>
+          </View>
+
+          {/* Controles de búsqueda y filtro */}
+          <View style={[styles.modalFiltersContainer, { backgroundColor: colorScheme === 'dark' ? 'rgba(0,0,0,0.3)' : '#f9f9f9' }]}>
+            {/* Buscador */}
+            <View style={[styles.modalSearchContainer, { backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : '#fff', borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.2)' : '#ddd' }]}>
+              <Text style={styles.modalSearchIcon}>🔍</Text>
+              <TextInput
+                style={[styles.modalSearchInput, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}
+                placeholder="Buscar por nombre, DNI, correo, entidad..."
+                placeholderTextColor={colorScheme === 'dark' ? '#888' : '#999'}
+                value={modalSearchText}
+                onChangeText={setModalSearchText}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {modalSearchText.length > 0 && (
+                <TouchableOpacity onPress={() => setModalSearchText('')}>
+                  <Text style={styles.modalSearchClear}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Selector de modo */}
+            <View style={styles.modalModeSelector}>
+              <TouchableOpacity
+                style={[
+                  styles.modalModeButton,
+                  modalFilterMode === 'todos' && styles.modalModeButtonActive,
+                  modalFilterMode === 'todos' && { backgroundColor: Colors.light.primary }
+                ]}
+                onPress={() => setModalFilterMode('todos')}
+              >
+                <Text style={[styles.modalModeButtonText, modalFilterMode === 'todos' && styles.modalModeButtonTextActive]}>Todos</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalModeButton,
+                  modalFilterMode === 'registro' && styles.modalModeButtonActive,
+                  modalFilterMode === 'registro' && { backgroundColor: Colors.light.modeRegistro }
+                ]}
+                onPress={() => setModalFilterMode('registro')}
+              >
+                <Text style={[styles.modalModeButtonText, modalFilterMode === 'registro' && styles.modalModeButtonTextActive]}>Registrados</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalModeButton,
+                  modalFilterMode === 'aula_magna' && styles.modalModeButtonActive,
+                  modalFilterMode === 'aula_magna' && { backgroundColor: Colors.light.modeAulaMagna }
+                ]}
+                onPress={() => setModalFilterMode('aula_magna')}
+              >
+                <Text style={[styles.modalModeButtonText, modalFilterMode === 'aula_magna' && styles.modalModeButtonTextActive]}>Aula Magna</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalModeButton,
+                  modalFilterMode === 'master_class' && styles.modalModeButtonActive,
+                  modalFilterMode === 'master_class' && { backgroundColor: Colors.light.modeMasterClass }
+                ]}
+                onPress={() => setModalFilterMode('master_class')}
+              >
+                <Text style={[styles.modalModeButtonText, modalFilterMode === 'master_class' && styles.modalModeButtonTextActive]}>Master Class</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalModeButton,
+                  modalFilterMode === 'cena' && styles.modalModeButtonActive,
+                  modalFilterMode === 'cena' && { backgroundColor: Colors.light.modeCena }
+                ]}
+                onPress={() => setModalFilterMode('cena')}
+              >
+                <Text style={[styles.modalModeButtonText, modalFilterMode === 'cena' && styles.modalModeButtonTextActive]}>Cena</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Contador de resultados */}
+            <Text style={[styles.modalResultsCount, { color: colorScheme === 'dark' ? '#aaa' : '#666' }]}>
+              {(() => {
+                const searchLower = modalSearchText.toLowerCase().trim();
+                const filtered = participants.filter(p => {
+                  // Filtro de modo
+                  if (modalFilterMode !== 'todos') {
+                    if (modalFilterMode === 'registro' && !p.estado?.registrado) return false;
+                    if (modalFilterMode === 'aula_magna' && !p.estado?.en_aula_magna) return false;
+                    if (modalFilterMode === 'master_class' && !p.estado?.en_master_class) return false;
+                    if (modalFilterMode === 'cena' && !p.estado?.en_cena) return false;
+                  }
+                  // Filtro de búsqueda
+                  if (searchLower) {
+                    const searchFields = [
+                      p.nombre, p.dni, p.email, p.entitat, p.escuela, p.cargo, p.telefono, p.acceso
+                    ].filter(Boolean).join(' ').toLowerCase();
+                    if (!searchFields.includes(searchLower)) return false;
+                  }
+                  return true;
+                });
+                return `${filtered.length} de ${participants.length} participantes`;
+              })()}
+            </Text>
           </View>
 
           {/* Contenido del modal */}
@@ -1153,7 +1258,26 @@ export default function DashboardScreen() {
               </View>
 
               {/* Tabla rows */}
-              {participants.map((participant, index) => (
+              {participants
+                .filter(p => {
+                  // Filtro de modo
+                  if (modalFilterMode !== 'todos') {
+                    if (modalFilterMode === 'registro' && !p.estado?.registrado) return false;
+                    if (modalFilterMode === 'aula_magna' && !p.estado?.en_aula_magna) return false;
+                    if (modalFilterMode === 'master_class' && !p.estado?.en_master_class) return false;
+                    if (modalFilterMode === 'cena' && !p.estado?.en_cena) return false;
+                  }
+                  // Filtro de búsqueda
+                  if (modalSearchText.trim()) {
+                    const searchLower = modalSearchText.toLowerCase().trim();
+                    const searchFields = [
+                      p.nombre, p.dni, p.email, p.entitat, p.escuela, p.cargo, p.telefono, p.acceso
+                    ].filter(Boolean).join(' ').toLowerCase();
+                    if (!searchFields.includes(searchLower)) return false;
+                  }
+                  return true;
+                })
+                .map((participant, index) => (
                 <View
                   key={participant.dni}
                   style={[
@@ -1981,5 +2105,60 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 10,
     fontWeight: '600',
+  },
+  // Filtros del modal
+  modalFiltersContainer: {
+    padding: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  modalSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  modalSearchIcon: {
+    fontSize: 16,
+    marginRight: Spacing.xs,
+  },
+  modalSearchInput: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    fontSize: 14,
+  },
+  modalSearchClear: {
+    fontSize: 16,
+    color: '#999',
+    padding: Spacing.xs,
+  },
+  modalModeSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: Spacing.sm,
+  },
+  modalModeButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
+  modalModeButtonActive: {
+    backgroundColor: Colors.light.primary,
+  },
+  modalModeButtonText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  modalModeButtonTextActive: {
+    color: '#fff',
+  },
+  modalResultsCount: {
+    fontSize: 12,
+    textAlign: 'right',
   },
 });
