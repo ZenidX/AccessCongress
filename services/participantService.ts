@@ -101,7 +101,7 @@ export async function getAllParticipants(eventId?: string): Promise<Participant[
 }
 
 /**
- * Delete a participant
+ * Delete a participant and all their access logs
  */
 export async function deleteParticipant(
   dni: string,
@@ -112,9 +112,30 @@ export async function deleteParticipant(
       ? getParticipantsCollection(eventId)
       : LEGACY_PARTICIPANTS_COLLECTION;
 
+    // Delete participant document
     const docRef = doc(db, collectionPath, dni);
     await deleteDoc(docRef);
     console.log(`✅ Participant ${dni} deleted successfully`);
+
+    // Delete all access logs for this participant
+    const logsCollectionPath = eventId
+      ? getAccessLogsCollection(eventId)
+      : LEGACY_ACCESS_LOGS_COLLECTION;
+
+    const logsQuery = query(
+      collection(db, logsCollectionPath),
+      where('dni', '==', dni)
+    );
+    const logsSnapshot = await getDocs(logsQuery);
+
+    if (!logsSnapshot.empty) {
+      const batch = writeBatch(db);
+      logsSnapshot.docs.forEach((logDoc) => {
+        batch.delete(logDoc.ref);
+      });
+      await batch.commit();
+      console.log(`✅ Deleted ${logsSnapshot.size} access logs for participant ${dni}`);
+    }
   } catch (error) {
     console.error('Error deleting participant:', error);
     throw error;
@@ -1067,33 +1088,57 @@ export async function createParticipant(
 }
 
 /**
- * Delete all participants for an event
+ * Delete all participants and their access logs for an event
  */
 export async function deleteAllParticipants(eventId: string): Promise<number> {
   try {
-    const collectionPath = getParticipantsCollection(eventId);
-    const querySnapshot = await getDocs(collection(db, collectionPath));
-
-    if (querySnapshot.empty) return 0;
-
-    // Process in batches of 500
     const batchSize = 500;
-    const docs = querySnapshot.docs;
-    let deleted = 0;
 
-    for (let i = 0; i < docs.length; i += batchSize) {
-      const batch = writeBatch(db);
-      const chunk = docs.slice(i, Math.min(i + batchSize, docs.length));
+    // 1. Delete all participants
+    const participantsPath = getParticipantsCollection(eventId);
+    const participantsSnapshot = await getDocs(collection(db, participantsPath));
 
-      chunk.forEach((document) => {
-        batch.delete(document.ref);
-      });
+    let deletedParticipants = 0;
+    if (!participantsSnapshot.empty) {
+      const participantDocs = participantsSnapshot.docs;
 
-      await batch.commit();
-      deleted += chunk.length;
+      for (let i = 0; i < participantDocs.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const chunk = participantDocs.slice(i, Math.min(i + batchSize, participantDocs.length));
+
+        chunk.forEach((document) => {
+          batch.delete(document.ref);
+        });
+
+        await batch.commit();
+        deletedParticipants += chunk.length;
+      }
+      console.log(`✅ Deleted ${deletedParticipants} participants`);
     }
 
-    return deleted;
+    // 2. Delete all access logs for this event
+    const logsPath = getAccessLogsCollection(eventId);
+    const logsSnapshot = await getDocs(collection(db, logsPath));
+
+    let deletedLogs = 0;
+    if (!logsSnapshot.empty) {
+      const logDocs = logsSnapshot.docs;
+
+      for (let i = 0; i < logDocs.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const chunk = logDocs.slice(i, Math.min(i + batchSize, logDocs.length));
+
+        chunk.forEach((document) => {
+          batch.delete(document.ref);
+        });
+
+        await batch.commit();
+        deletedLogs += chunk.length;
+      }
+      console.log(`✅ Deleted ${deletedLogs} access logs`);
+    }
+
+    return deletedParticipants;
   } catch (error) {
     console.error('Error deleting all participants:', error);
     throw error;

@@ -34,6 +34,7 @@ import {
   createParticipant,
   getAllParticipants,
   deleteParticipant,
+  deleteAllParticipants,
   ImportMode,
 } from '@/services/participantService';
 import { sendEmailToParticipant, sendBulkEmails } from '@/services/emailSendService';
@@ -488,7 +489,7 @@ export function ParticipantsSection() {
 
     const confirmed = await showConfirm(
       'Confirmar eliminación',
-      `¿Estás seguro de eliminar a ${nombre} (${dni})?\n\nEsta acción no se puede deshacer.`,
+      `¿Estás seguro de eliminar a ${nombre} (${dni})?\n\nSe eliminarán también todos sus registros de acceso.\n\nEsta acción no se puede deshacer.`,
       'Eliminar',
       'Cancelar',
       true
@@ -506,6 +507,7 @@ export function ParticipantsSection() {
         [
           `🆔 DNI: ${dni}`,
           `📅 Evento: ${currentEvent.name}`,
+          `📋 Registros de acceso eliminados`,
         ]
       );
       loadParticipants();
@@ -737,6 +739,74 @@ export function ParticipantsSection() {
         'error',
         'Error al resetear',
         'No se pudieron resetear los estados de los participantes.',
+        [
+          error.message || 'Error desconocido',
+          'Inténtalo de nuevo o contacta soporte.',
+        ]
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Delete all participants from the event
+   */
+  const handleDeleteAllParticipants = async () => {
+    if (!requireEvent('eliminar participantes')) {
+      return;
+    }
+
+    if (participants.length === 0) {
+      showResult(
+        'info',
+        'Sin participantes',
+        'No hay participantes para eliminar en este evento.',
+        [`📅 Evento: ${currentEvent.name}`]
+      );
+      return;
+    }
+
+    const confirmed = await showConfirm(
+      '⚠️ Eliminar TODOS los participantes',
+      `¿Estás seguro de eliminar TODOS los ${participants.length} participantes del evento "${currentEvent.name}"?\n\n🚨 ESTA ACCIÓN ES IRREVERSIBLE 🚨\n\nSe eliminarán permanentemente:\n• Todos los datos de participantes\n• Todo el historial de estados\n\nLos logs de acceso se mantendrán.`,
+      'Eliminar todo',
+      'Cancelar',
+      true
+    );
+
+    if (!confirmed) return;
+
+    // Double confirmation for safety
+    const doubleConfirmed = await showConfirm(
+      '¿Estás completamente seguro?',
+      `Vas a eliminar ${participants.length} participantes.\n\nEscribe mentalmente "ELIMINAR" para confirmar que entiendes las consecuencias.`,
+      'Sí, eliminar todo',
+      'No, cancelar',
+      true
+    );
+
+    if (!doubleConfirmed) return;
+
+    setLoading(true);
+    try {
+      const deletedCount = await deleteAllParticipants(currentEvent.id);
+      showResult(
+        'success',
+        'Participantes eliminados',
+        `Se han eliminado todos los participantes del evento.`,
+        [
+          `📅 Evento: ${currentEvent.name}`,
+          `🗑️ Participantes eliminados: ${deletedCount}`,
+          '⚠️ Esta acción no se puede deshacer',
+        ]
+      );
+      loadParticipants();
+    } catch (error: any) {
+      showResult(
+        'error',
+        'Error al eliminar',
+        'No se pudieron eliminar los participantes.',
         [
           error.message || 'Error desconocido',
           'Inténtalo de nuevo o contacta soporte.',
@@ -980,6 +1050,61 @@ export function ParticipantsSection() {
           >
             <Text style={styles.infoButtonText}>ℹ️ Ver formatos aceptados</Text>
           </TouchableOpacity>
+
+          {/* Tools section */}
+          <View style={[styles.subsection, { marginTop: Spacing.xl }]}>
+            <ThemedText style={styles.sectionTitle}>⚙️ Herramientas</ThemedText>
+
+            <TouchableOpacity
+              style={[
+                styles.actionCard,
+                Shadows.light,
+                {
+                  backgroundColor: Colors[colorScheme ?? 'light'].cardBackground,
+                  opacity: currentEvent ? 1 : 0.5,
+                },
+              ]}
+              onPress={handleResetStates}
+              disabled={loading || !currentEvent}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.actionIcon}>🔄</Text>
+              <View style={styles.actionTextContainer}>
+                <ThemedText style={styles.actionTitle}>
+                  Resetear todos los estados
+                </ThemedText>
+                <ThemedText style={styles.actionDescription}>
+                  Marcar todos como no registrados y fuera de ubicaciones
+                </ThemedText>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.actionCard,
+                Shadows.light,
+                {
+                  backgroundColor: Colors[colorScheme ?? 'light'].cardBackground,
+                  borderWidth: 2,
+                  borderColor: Colors.light.error,
+                  opacity: currentEvent && participants.length > 0 ? 1 : 0.5,
+                },
+              ]}
+              onPress={handleDeleteAllParticipants}
+              disabled={loading || !currentEvent || participants.length === 0}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.actionIcon}>🗑️</Text>
+              <View style={styles.actionTextContainer}>
+                <ThemedText style={[styles.actionTitle, { color: Colors.light.error }]}>
+                  Eliminar todos los participantes
+                </ThemedText>
+                <ThemedText style={styles.actionDescription}>
+                  Borrar permanentemente todos los participantes y logs ({participants.length})
+                </ThemedText>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Right column: Participants list */}
@@ -1043,8 +1168,8 @@ export function ParticipantsSection() {
                   <Text style={[styles.tableCell, styles.tableHeaderCell, styles.colAcciones]}>Acciones</Text>
                 </View>
 
-                {/* Table rows */}
-                <ScrollView style={isWideScreen ? { maxHeight: 800 } : { maxHeight: 600 }}>
+                {/* Table rows - height calculated to match left column bottom */}
+                <ScrollView style={{ maxHeight: isWideScreen ? 900 : 400 }}>
                   {participants.map((participant, index) => (
                     <View
                       key={participant.dni}
@@ -1122,34 +1247,6 @@ export function ParticipantsSection() {
             )}
           </View>
 
-          {/* Tools section */}
-          <View style={[styles.subsection, { marginTop: Spacing.xl }]}>
-            <ThemedText style={styles.sectionTitle}>⚙️ Herramientas</ThemedText>
-
-            <TouchableOpacity
-              style={[
-                styles.actionCard,
-                Shadows.light,
-                {
-                  backgroundColor: Colors[colorScheme ?? 'light'].cardBackground,
-                  opacity: currentEvent ? 1 : 0.5,
-                },
-              ]}
-              onPress={handleResetStates}
-              disabled={loading || !currentEvent}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.actionIcon}>🔄</Text>
-              <View style={styles.actionTextContainer}>
-                <ThemedText style={styles.actionTitle}>
-                  Resetear todos los estados
-                </ThemedText>
-                <ThemedText style={styles.actionDescription}>
-                  Marcar todos como no registrados y fuera de ubicaciones
-                </ThemedText>
-              </View>
-            </TouchableOpacity>
-          </View>
         </View>
       </View>
 
