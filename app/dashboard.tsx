@@ -1252,10 +1252,10 @@ export default function DashboardScreen() {
                 {/* Tabla header */}
                 <View style={[styles.participantsTableHeader, { backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : '#f5f5f5' }]}>
                   <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellNombre, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Nombre</Text>
+                  <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellUbicacion, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Ubicación</Text>
                   <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellDni, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>DNI</Text>
                   <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellEmail, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Correo</Text>
                   <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellEntidad, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Entidad</Text>
-                  <Text style={[styles.participantsTableHeaderCell, styles.participantsTableCellUbicacion, { color: colorScheme === 'dark' ? '#ccc' : '#333' }]}>Ubicación</Text>
                 </View>
 
               {/* Tabla rows */}
@@ -1297,24 +1297,6 @@ export default function DashboardScreen() {
                   >
                     {participant.nombre}
                   </Text>
-                  <Text
-                    style={[styles.participantsTableCell, styles.participantsTableCellDni, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}
-                    numberOfLines={1}
-                  >
-                    {participant.dni}
-                  </Text>
-                  <Text
-                    style={[styles.participantsTableCell, styles.participantsTableCellEmail, { color: colorScheme === 'dark' ? '#ddd' : '#333' }]}
-                    numberOfLines={1}
-                  >
-                    {participant.email || '-'}
-                  </Text>
-                  <Text
-                    style={[styles.participantsTableCell, styles.participantsTableCellEntidad, { color: colorScheme === 'dark' ? '#ddd' : '#333' }]}
-                    numberOfLines={1}
-                  >
-                    {participant.entitat || participant.escuela || '-'}
-                  </Text>
                   <View style={[styles.participantsTableCell, styles.participantsTableCellUbicacion]}>
                     <View style={styles.ubicacionBadgesRow}>
                       {participant.estado?.en_aula_magna && (
@@ -1337,6 +1319,24 @@ export default function DashboardScreen() {
                       )}
                     </View>
                   </View>
+                  <Text
+                    style={[styles.participantsTableCell, styles.participantsTableCellDni, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}
+                    numberOfLines={1}
+                  >
+                    {participant.dni}
+                  </Text>
+                  <Text
+                    style={[styles.participantsTableCell, styles.participantsTableCellEmail, { color: colorScheme === 'dark' ? '#ddd' : '#333' }]}
+                    numberOfLines={1}
+                  >
+                    {participant.email || '-'}
+                  </Text>
+                  <Text
+                    style={[styles.participantsTableCell, styles.participantsTableCellEntidad, { color: colorScheme === 'dark' ? '#ddd' : '#333' }]}
+                    numberOfLines={1}
+                  >
+                    {participant.entitat || participant.escuela || '-'}
+                  </Text>
                 </View>
               ))}
               </View>
