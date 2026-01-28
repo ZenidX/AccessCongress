@@ -109,6 +109,13 @@ export function ParticipantsSection() {
   const [newParticipantNombre, setNewParticipantNombre] = useState('');
   const [newParticipantEmail, setNewParticipantEmail] = useState('');
   const [newParticipantTelefono, setNewParticipantTelefono] = useState('');
+  const [newParticipantEntitat, setNewParticipantEntitat] = useState('');
+  const [newParticipantEscuela, setNewParticipantEscuela] = useState('');
+  const [newParticipantCargo, setNewParticipantCargo] = useState('');
+  const [newParticipantHaPagado, setNewParticipantHaPagado] = useState(false);
+  const [newParticipantPermisoAulaMagna, setNewParticipantPermisoAulaMagna] = useState(true);
+  const [newParticipantPermisoMasterClass, setNewParticipantPermisoMasterClass] = useState(false);
+  const [newParticipantPermisoCena, setNewParticipantPermisoCena] = useState(false);
 
   // Email sending state
   const [showEmailConfirmModal, setShowEmailConfirmModal] = useState(false);
@@ -425,10 +432,14 @@ export function ParticipantsSection() {
         nombre: newParticipantNombre,
         email: newParticipantEmail || undefined,
         telefono: newParticipantTelefono || undefined,
+        entitat: newParticipantEntitat || undefined,
+        escuela: newParticipantEscuela || undefined,
+        cargo: newParticipantCargo || undefined,
+        haPagado: newParticipantHaPagado,
         permisos: {
-          aula_magna: true,
-          master_class: false,
-          cena: false,
+          aula_magna: newParticipantPermisoAulaMagna,
+          master_class: newParticipantPermisoMasterClass,
+          cena: newParticipantPermisoCena,
         },
         estado: {
           registrado: false,
@@ -447,6 +458,13 @@ export function ParticipantsSection() {
       setNewParticipantNombre('');
       setNewParticipantEmail('');
       setNewParticipantTelefono('');
+      setNewParticipantEntitat('');
+      setNewParticipantEscuela('');
+      setNewParticipantCargo('');
+      setNewParticipantHaPagado(false);
+      setNewParticipantPermisoAulaMagna(true);
+      setNewParticipantPermisoMasterClass(false);
+      setNewParticipantPermisoCena(false);
       loadParticipants();
 
       showResult(
@@ -1266,7 +1284,12 @@ export function ParticipantsSection() {
         onRequestClose={() => setShowAddParticipantModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
+          <ScrollView
+            style={styles.addParticipantScrollView}
+            contentContainerStyle={styles.addParticipantScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+          <View style={[styles.modalContent, styles.addParticipantModalContent, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
             <ThemedText style={styles.modalTitle}>Añadir Participante</ThemedText>
 
             <View style={styles.formField}>
@@ -1315,6 +1338,97 @@ export function ParticipantsSection() {
               />
             </View>
 
+            <View style={styles.formField}>
+              <ThemedText style={styles.fieldLabel}>Entitat/Institución</ThemedText>
+              <TextInput
+                style={[styles.input, { backgroundColor: Colors[colorScheme ?? 'light'].background, color: Colors[colorScheme ?? 'light'].text }]}
+                value={newParticipantEntitat}
+                onChangeText={setNewParticipantEntitat}
+                placeholder="Nombre de la institución"
+                placeholderTextColor={Colors[colorScheme ?? 'light'].text + '60'}
+              />
+            </View>
+
+            <View style={styles.formField}>
+              <ThemedText style={styles.fieldLabel}>Tipo de Escuela</ThemedText>
+              <TextInput
+                style={[styles.input, { backgroundColor: Colors[colorScheme ?? 'light'].background, color: Colors[colorScheme ?? 'light'].text }]}
+                value={newParticipantEscuela}
+                onChangeText={setNewParticipantEscuela}
+                placeholder="Pública, Concertada, Privada..."
+                placeholderTextColor={Colors[colorScheme ?? 'light'].text + '60'}
+              />
+            </View>
+
+            <View style={styles.formField}>
+              <ThemedText style={styles.fieldLabel}>Cargo/Responsabilidad</ThemedText>
+              <TextInput
+                style={[styles.input, { backgroundColor: Colors[colorScheme ?? 'light'].background, color: Colors[colorScheme ?? 'light'].text }]}
+                value={newParticipantCargo}
+                onChangeText={setNewParticipantCargo}
+                placeholder="Director, Profesor, Coordinador..."
+                placeholderTextColor={Colors[colorScheme ?? 'light'].text + '60'}
+              />
+            </View>
+
+            {/* Ha Pagado toggle */}
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => setNewParticipantHaPagado(!newParticipantHaPagado)}
+            >
+              <View style={[
+                styles.checkbox,
+                newParticipantHaPagado && { backgroundColor: Colors.light.success, borderColor: Colors.light.success }
+              ]}>
+                {newParticipantHaPagado && <Text style={styles.checkboxCheck}>✓</Text>}
+              </View>
+              <ThemedText style={styles.checkboxLabel}>Ha Pagado</ThemedText>
+            </TouchableOpacity>
+
+            {/* Permisos section */}
+            <View style={styles.permisosSection}>
+              <ThemedText style={styles.permisosSectionTitle}>Permisos de Acceso</ThemedText>
+
+              <TouchableOpacity
+                style={styles.checkboxRow}
+                onPress={() => setNewParticipantPermisoAulaMagna(!newParticipantPermisoAulaMagna)}
+              >
+                <View style={[
+                  styles.checkbox,
+                  newParticipantPermisoAulaMagna && { backgroundColor: Colors.light.modeCena, borderColor: Colors.light.modeCena }
+                ]}>
+                  {newParticipantPermisoAulaMagna && <Text style={styles.checkboxCheck}>✓</Text>}
+                </View>
+                <ThemedText style={styles.checkboxLabel}>Aula Magna</ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.checkboxRow}
+                onPress={() => setNewParticipantPermisoMasterClass(!newParticipantPermisoMasterClass)}
+              >
+                <View style={[
+                  styles.checkbox,
+                  newParticipantPermisoMasterClass && { backgroundColor: Colors.light.modeAulaMagna, borderColor: Colors.light.modeAulaMagna }
+                ]}>
+                  {newParticipantPermisoMasterClass && <Text style={styles.checkboxCheck}>✓</Text>}
+                </View>
+                <ThemedText style={styles.checkboxLabel}>Master Class</ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.checkboxRow}
+                onPress={() => setNewParticipantPermisoCena(!newParticipantPermisoCena)}
+              >
+                <View style={[
+                  styles.checkbox,
+                  newParticipantPermisoCena && { backgroundColor: Colors.light.modeMasterClass, borderColor: Colors.light.modeMasterClass }
+                ]}>
+                  {newParticipantPermisoCena && <Text style={styles.checkboxCheck}>✓</Text>}
+                </View>
+                <ThemedText style={styles.checkboxLabel}>Cena</ThemedText>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
@@ -1331,6 +1445,7 @@ export function ParticipantsSection() {
               </TouchableOpacity>
             </View>
           </View>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -1932,6 +2047,19 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
   },
+  addParticipantScrollView: {
+    flex: 1,
+    width: '100%',
+  },
+  addParticipantScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+  addParticipantModalContent: {
+    maxWidth: 450,
+  },
   modalTitle: {
     fontSize: FontSizes.xl,
     fontWeight: 'bold',
@@ -1947,6 +2075,43 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
     fontSize: FontSizes.md,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: Colors.light.border,
+    borderRadius: BorderRadius.sm,
+    marginRight: Spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxCheck: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  checkboxLabel: {
+    fontSize: FontSizes.md,
+  },
+  permisosSection: {
+    marginTop: Spacing.md,
+    marginBottom: Spacing.md,
+    padding: Spacing.md,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    borderRadius: BorderRadius.md,
+  },
+  permisosSectionTitle: {
+    fontSize: FontSizes.sm,
+    fontWeight: 'bold',
+    marginBottom: Spacing.sm,
+    color: Colors.light.primary,
   },
   modalActions: {
     flexDirection: 'row',

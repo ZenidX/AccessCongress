@@ -446,6 +446,7 @@ export async function importParticipantsFromCSV(
         ]);
         const cena = getValueFromRow(row, ['cena', 'dinner']);
         const acceso = getValueFromRow(row, ['acceso', 'access']).toLowerCase();
+        const esPresencial = acceso.includes('presencial');
 
         const participant: Participant = {
           dni,
@@ -473,9 +474,10 @@ export async function importParticipantsFromCSV(
             getValueFromRow(row, ['ha pagat?', 'ha pagat', 'ha pagado'])
           ),
           permisos: {
-            aula_magna: acceso.includes('presencial'),
-            master_class: isPositiveValue(masterClass),
-            cena: isPositiveValue(cena),
+            aula_magna: esPresencial,
+            // Solo asignar permisos de master_class y cena si es presencial
+            master_class: esPresencial && isPositiveValue(masterClass),
+            cena: esPresencial && isPositiveValue(cena),
           },
           estado: {
             registrado: false,
@@ -616,6 +618,7 @@ export async function importParticipantsFromExcel(
         ]);
         const cena = getValueFromRow(row, ['cena', 'dinner']);
         const acceso = getValueFromRow(row, ['acceso', 'access']).toLowerCase();
+        const esPresencial = acceso.includes('presencial');
 
         const participant: Participant = {
           dni,
@@ -643,9 +646,10 @@ export async function importParticipantsFromExcel(
             getValueFromRow(row, ['ha pagat?', 'ha pagat', 'ha pagado'])
           ),
           permisos: {
-            aula_magna: acceso.includes('presencial'),
-            master_class: isPositiveValue(masterClass),
-            cena: isPositiveValue(cena),
+            aula_magna: esPresencial,
+            // Solo asignar permisos de master_class y cena si es presencial
+            master_class: esPresencial && isPositiveValue(masterClass),
+            cena: esPresencial && isPositiveValue(cena),
           },
           estado: {
             registrado: false,
