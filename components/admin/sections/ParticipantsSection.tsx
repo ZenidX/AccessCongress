@@ -100,6 +100,9 @@ export function ParticipantsSection() {
   // Local events state (fetch directly like EventManager)
   const [events, setEvents] = useState<Event[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
+
+  // Search state for participants list
+  const [searchText, setSearchText] = useState('');
   // Organization names for grouping (organizationId -> name)
   const [orgNames, setOrgNames] = useState<Record<string, string>>({});
 
@@ -1159,6 +1162,33 @@ export function ParticipantsSection() {
               </View>
             </View>
 
+            {/* Search bar */}
+            {currentEvent && participants.length > 0 && (
+              <View style={[
+                styles.participantSearchContainer,
+                {
+                  backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : '#fff',
+                  borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.2)' : '#ddd'
+                }
+              ]}>
+                <Text style={styles.participantSearchIcon}>🔍</Text>
+                <TextInput
+                  style={[styles.participantSearchInput, { color: Colors[colorScheme ?? 'light'].text }]}
+                  placeholder="Buscar por nombre, DNI, email, entidad..."
+                  placeholderTextColor={Colors[colorScheme ?? 'light'].text + '60'}
+                  value={searchText}
+                  onChangeText={setSearchText}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {searchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchText('')}>
+                    <Text style={styles.participantSearchClear}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
             {loadingParticipants ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={Colors.light.primary} />
@@ -1186,9 +1216,33 @@ export function ParticipantsSection() {
                   <Text style={[styles.tableCell, styles.tableHeaderCell, styles.colAcciones]}>Acciones</Text>
                 </View>
 
+                {/* Search results count */}
+                {searchText.trim() && (
+                  <View style={styles.searchResultsCount}>
+                    <ThemedText style={styles.searchResultsText}>
+                      {participants.filter(p => {
+                        const searchLower = searchText.toLowerCase().trim();
+                        const searchFields = [
+                          p.dni, p.nombre, p.email, p.entitat, p.escuela, p.cargo, p.telefono
+                        ].filter(Boolean).join(' ').toLowerCase();
+                        return searchFields.includes(searchLower);
+                      }).length} de {participants.length} participantes
+                    </ThemedText>
+                  </View>
+                )}
+
                 {/* Table rows - height calculated to match left column bottom */}
                 <ScrollView style={{ maxHeight: isWideScreen ? 900 : 400 }}>
-                  {participants.map((participant, index) => (
+                  {participants
+                    .filter(p => {
+                      if (!searchText.trim()) return true;
+                      const searchLower = searchText.toLowerCase().trim();
+                      const searchFields = [
+                        p.dni, p.nombre, p.email, p.entitat, p.escuela, p.cargo, p.telefono
+                      ].filter(Boolean).join(' ').toLowerCase();
+                      return searchFields.includes(searchLower);
+                    })
+                    .map((participant, index) => (
                     <View
                       key={participant.dni}
                       style={[
@@ -1914,6 +1968,42 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: FontSizes.sm,
+  },
+  // Participant search
+  participantSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  participantSearchIcon: {
+    fontSize: 16,
+    marginRight: Spacing.sm,
+  },
+  participantSearchInput: {
+    flex: 1,
+    fontSize: FontSizes.sm,
+    paddingVertical: Spacing.xs,
+  },
+  participantSearchClear: {
+    fontSize: 16,
+    color: Colors.light.textSecondary,
+    paddingHorizontal: Spacing.sm,
+  },
+  searchResultsCount: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    backgroundColor: Colors.light.primary + '15',
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.sm,
+  },
+  searchResultsText: {
+    fontSize: FontSizes.xs,
+    color: Colors.light.primary,
+    fontWeight: '600',
   },
   // Table
   table: {
