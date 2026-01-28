@@ -20,6 +20,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { Colors, BorderRadius, Spacing, FontSizes, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -47,6 +48,25 @@ const STATUS_COLORS: Record<EventStatus, string> = {
   active: '#4caf50',
   completed: '#2196f3',
   archived: '#757575',
+};
+
+// Cross-platform confirm helper
+const showConfirm = async (
+  title: string,
+  message: string,
+  confirmText: string = 'Confirmar',
+  cancelText: string = 'Cancelar',
+  destructive: boolean = false
+): Promise<boolean> => {
+  if (Platform.OS === 'web') {
+    return window.confirm(`${title}\n\n${message}`);
+  }
+  return new Promise((resolve) => {
+    Alert.alert(title, message, [
+      { text: cancelText, style: 'cancel', onPress: () => resolve(false) },
+      { text: confirmText, style: destructive ? 'destructive' : 'default', onPress: () => resolve(true) },
+    ]);
+  });
 };
 
 const STATUS_LABELS: Record<EventStatus, string> = {
@@ -121,31 +141,37 @@ export function EventManager({
     loadEvents();
   };
 
-  const handleDeleteEvent = (event: Event) => {
-    Alert.alert(
+  const handleDeleteEvent = async (event: Event) => {
+    const confirmed = await showConfirm(
       'Eliminar Evento',
-      `¿Estás seguro de que quieres eliminar "${event.name}"? Esta acción no se puede deshacer.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteEvent(event.id);
-              if (currentEvent?.id === event.id) {
-                setCurrentEvent(null);
-              }
-              loadEvents();
-              Alert.alert('Éxito', 'Evento eliminado correctamente');
-            } catch (error) {
-              console.error('Error deleting event:', error);
-              Alert.alert('Error', 'No se pudo eliminar el evento');
-            }
-          },
-        },
-      ]
+      `¿Estás seguro de que quieres eliminar "${event.name}"?\n\nSe eliminarán todos los participantes y logs asociados.\n\nEsta acción no se puede deshacer.`,
+      'Eliminar',
+      'Cancelar',
+      true
     );
+
+    if (!confirmed) return;
+
+    try {
+      await deleteEvent(event.id);
+      if (currentEvent?.id === event.id) {
+        setCurrentEvent(null);
+      }
+      loadEvents();
+      if (Platform.OS === 'web') {
+        // Use a simple notification for web
+        console.log('Evento eliminado correctamente');
+      } else {
+        Alert.alert('Éxito', 'Evento eliminado correctamente');
+      }
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      if (Platform.OS === 'web') {
+        window.alert('Error: No se pudo eliminar el evento');
+      } else {
+        Alert.alert('Error', 'No se pudo eliminar el evento');
+      }
+    }
   };
 
   const handleSelectEvent = (event: Event) => {
