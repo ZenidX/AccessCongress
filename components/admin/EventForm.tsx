@@ -372,8 +372,8 @@ export function EventForm({
         </View>
       )}
 
-      {/* Organization Selector (for super_admin without organizationId) */}
-      {isSuperAdmin() && !organizationId && !isEditing && (
+      {/* Organization Selector (for super_admin) */}
+      {isSuperAdmin() && !isEditing && (
         <View style={styles.field}>
           <Text style={[styles.label, { color: errors.organization ? colors.error : colors.text }]}>
             Organización *
