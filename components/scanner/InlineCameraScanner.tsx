@@ -311,40 +311,33 @@ export function InlineCameraScanner({ onScanResult }: InlineCameraScannerProps) 
               {lastResult.participant && (
                 <View style={styles.participantInfo}>
                   <Text style={styles.resultParticipantName}>{lastResult.participant.nombre}</Text>
-                  <Text style={styles.resultParticipantDetail}>DNI: {lastResult.participant.dni}</Text>
-                  {lastResult.participant.entitat && (
-                    <Text style={styles.resultParticipantDetail}>{lastResult.participant.entitat}</Text>
-                  )}
-                  {lastResult.participant.cargo && (
-                    <Text style={styles.resultParticipantDetail}>{lastResult.participant.cargo}</Text>
-                  )}
 
-                  {/* Mostrar permisos en modo registro o cuando no tiene acceso */}
-                  {(modo === 'registro' || !lastResult.success) && lastResult.participant.permisos && (
-                    <View style={styles.permisosContainer}>
-                      <Text style={styles.permisosTitle}>Accesos permitidos:</Text>
-                      <View style={styles.permisosBadges}>
-                        <View style={[
-                          styles.permisoBadge,
-                          { backgroundColor: lastResult.participant.permisos.aula_magna ? Colors.light.modeAulaMagna : 'rgba(255,255,255,0.3)' }
-                        ]}>
+                  {/* Mostrar permisos siempre */}
+                  <View style={styles.permisosContainer}>
+                    <Text style={styles.permisosTitle}>Acceso a:</Text>
+                    <View style={styles.permisosBadges}>
+                      {lastResult.participant.permisos?.aula_magna && (
+                        <View style={[styles.permisoBadge, { backgroundColor: Colors.light.modeAulaMagna }]}>
                           <Text style={styles.permisoBadgeText}>Aula Magna</Text>
                         </View>
-                        <View style={[
-                          styles.permisoBadge,
-                          { backgroundColor: lastResult.participant.permisos.master_class ? Colors.light.modeMasterClass : 'rgba(255,255,255,0.3)' }
-                        ]}>
+                      )}
+                      {lastResult.participant.permisos?.master_class && (
+                        <View style={[styles.permisoBadge, { backgroundColor: Colors.light.modeMasterClass }]}>
                           <Text style={styles.permisoBadgeText}>Master Class</Text>
                         </View>
-                        <View style={[
-                          styles.permisoBadge,
-                          { backgroundColor: lastResult.participant.permisos.cena ? Colors.light.modeCena : 'rgba(255,255,255,0.3)' }
-                        ]}>
+                      )}
+                      {lastResult.participant.permisos?.cena && (
+                        <View style={[styles.permisoBadge, { backgroundColor: Colors.light.modeCena }]}>
                           <Text style={styles.permisoBadgeText}>Cena</Text>
                         </View>
-                      </View>
+                      )}
+                      {!lastResult.participant.permisos?.aula_magna &&
+                       !lastResult.participant.permisos?.master_class &&
+                       !lastResult.participant.permisos?.cena && (
+                        <Text style={styles.noPermisosText}>Sin accesos</Text>
+                      )}
                     </View>
-                  )}
+                  </View>
                 </View>
               )}
               <Text style={styles.resultHint}>Toca para continuar</Text>
@@ -488,12 +481,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 4,
   },
-  resultParticipantDetail: {
-    color: '#fff',
-    fontSize: 13,
-    opacity: 0.9,
-    textAlign: 'center',
-  },
   permisosContainer: {
     marginTop: Spacing.sm,
     alignItems: 'center',
@@ -519,6 +506,11 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 11,
     fontWeight: '600',
+  },
+  noPermisosText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+    fontStyle: 'italic',
   },
   resultHint: {
     color: '#fff',
