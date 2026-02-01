@@ -309,7 +309,43 @@ export function InlineCameraScanner({ onScanResult }: InlineCameraScannerProps) 
               <Text style={styles.resultIcon}>{lastResult.success ? '✅' : '❌'}</Text>
               <Text style={styles.resultMessage}>{lastResult.message}</Text>
               {lastResult.participant && (
-                <Text style={styles.resultParticipant}>{lastResult.participant.nombre}</Text>
+                <View style={styles.participantInfo}>
+                  <Text style={styles.resultParticipantName}>{lastResult.participant.nombre}</Text>
+                  <Text style={styles.resultParticipantDetail}>DNI: {lastResult.participant.dni}</Text>
+                  {lastResult.participant.entitat && (
+                    <Text style={styles.resultParticipantDetail}>{lastResult.participant.entitat}</Text>
+                  )}
+                  {lastResult.participant.cargo && (
+                    <Text style={styles.resultParticipantDetail}>{lastResult.participant.cargo}</Text>
+                  )}
+
+                  {/* Mostrar permisos en modo registro o cuando no tiene acceso */}
+                  {(modo === 'registro' || !lastResult.success) && lastResult.participant.permisos && (
+                    <View style={styles.permisosContainer}>
+                      <Text style={styles.permisosTitle}>Accesos permitidos:</Text>
+                      <View style={styles.permisosBadges}>
+                        <View style={[
+                          styles.permisoBadge,
+                          { backgroundColor: lastResult.participant.permisos.aula_magna ? Colors.light.modeAulaMagna : 'rgba(255,255,255,0.3)' }
+                        ]}>
+                          <Text style={styles.permisoBadgeText}>Aula Magna</Text>
+                        </View>
+                        <View style={[
+                          styles.permisoBadge,
+                          { backgroundColor: lastResult.participant.permisos.master_class ? Colors.light.modeMasterClass : 'rgba(255,255,255,0.3)' }
+                        ]}>
+                          <Text style={styles.permisoBadgeText}>Master Class</Text>
+                        </View>
+                        <View style={[
+                          styles.permisoBadge,
+                          { backgroundColor: lastResult.participant.permisos.cena ? Colors.light.modeCena : 'rgba(255,255,255,0.3)' }
+                        ]}>
+                          <Text style={styles.permisoBadgeText}>Cena</Text>
+                        </View>
+                      </View>
+                    </View>
+                  )}
+                </View>
               )}
               <Text style={styles.resultHint}>Toca para continuar</Text>
             </TouchableOpacity>
@@ -439,13 +475,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+  participantInfo: {
+    alignItems: 'center',
     marginBottom: Spacing.xs,
   },
-  resultParticipant: {
+  resultParticipantName: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  resultParticipantDetail: {
+    color: '#fff',
+    fontSize: 13,
     opacity: 0.9,
     textAlign: 'center',
+  },
+  permisosContainer: {
+    marginTop: Spacing.sm,
+    alignItems: 'center',
+  },
+  permisosTitle: {
+    color: '#fff',
+    fontSize: 12,
+    opacity: 0.8,
+    marginBottom: 6,
+  },
+  permisosBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  permisoBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  permisoBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
   },
   resultHint: {
     color: '#fff',

@@ -513,15 +513,39 @@ export default function ScannerScreen() {
             {/* Mensaje de validación (ej: "Acceso permitido", "Sin permiso de master class") */}
             <Text style={styles.modalMessage}>{resultModal.message}</Text>
 
-            {/* Información del participante (nombre y DNI) */}
+            {/* Información del participante (nombre y accesos permitidos) */}
             {resultModal.participant && (
               <View style={styles.participantInfo}>
                 <Text style={styles.participantName}>
                   {resultModal.participant.nombre}
                 </Text>
-                <Text style={styles.participantDni}>
-                  DNI: {resultModal.participant.dni}
-                </Text>
+
+                {/* Mostrar accesos permitidos */}
+                <View style={styles.permissionsContainer}>
+                  <Text style={styles.permissionsLabel}>Acceso a:</Text>
+                  <View style={styles.permissionsList}>
+                    {resultModal.participant.permisos?.aula_magna && (
+                      <View style={[styles.permissionBadge, styles.permissionAulaMagna]}>
+                        <Text style={styles.permissionBadgeText}>Aula Magna</Text>
+                      </View>
+                    )}
+                    {resultModal.participant.permisos?.master_class && (
+                      <View style={[styles.permissionBadge, styles.permissionMasterClass]}>
+                        <Text style={styles.permissionBadgeText}>Master Class</Text>
+                      </View>
+                    )}
+                    {resultModal.participant.permisos?.cena && (
+                      <View style={[styles.permissionBadge, styles.permissionCena]}>
+                        <Text style={styles.permissionBadgeText}>Cena</Text>
+                      </View>
+                    )}
+                    {!resultModal.participant.permisos?.aula_magna &&
+                     !resultModal.participant.permisos?.master_class &&
+                     !resultModal.participant.permisos?.cena && (
+                      <Text style={styles.noPermissionsText}>Sin accesos adicionales</Text>
+                    )}
+                  </View>
+                </View>
               </View>
             )}
 
@@ -700,15 +724,51 @@ const styles = StyleSheet.create({
   },
   participantName: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 5,
+    marginBottom: Spacing.sm,
   },
-  participantDni: {
-    color: '#fff',
-    fontSize: 14,
+  permissionsContainer: {
+    marginTop: Spacing.xs,
+  },
+  permissionsLabel: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
     textAlign: 'center',
+    marginBottom: Spacing.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  permissionsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+  },
+  permissionBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+  },
+  permissionAulaMagna: {
+    backgroundColor: Colors.light.primary,
+  },
+  permissionMasterClass: {
+    backgroundColor: Colors.light.secondary,
+  },
+  permissionCena: {
+    backgroundColor: Colors.light.accent,
+  },
+  permissionBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  noPermissionsText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+    fontStyle: 'italic',
   },
   modalButton: {
     backgroundColor: 'rgba(255,255,255,0.3)',

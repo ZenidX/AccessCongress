@@ -69,37 +69,6 @@ const showConfirm = async (
   });
 };
 
-// Cross-platform delete confirm with logs option
-// Returns: 'with-logs' | 'without-logs' | 'cancel'
-const showDeleteConfirm = async (
-  title: string,
-  message: string
-): Promise<'with-logs' | 'without-logs' | 'cancel'> => {
-  if (Platform.OS === 'web') {
-    const confirmDelete = window.confirm(`${title}\n\n${message}`);
-    if (!confirmDelete) return 'cancel';
-
-    const deleteLogs = window.confirm(
-      '¿Eliminar también los logs de acceso?\n\n' +
-      '• Aceptar: Eliminar participante(s) Y sus logs de acceso\n' +
-      '• Cancelar: Eliminar solo participante(s), mantener logs'
-    );
-    return deleteLogs ? 'with-logs' : 'without-logs';
-  }
-
-  return new Promise((resolve) => {
-    Alert.alert(
-      title,
-      message + '\n\n¿Qué deseas hacer con los logs de acceso?',
-      [
-        { text: 'Cancelar', style: 'cancel', onPress: () => resolve('cancel') },
-        { text: 'Mantener logs', style: 'default', onPress: () => resolve('without-logs') },
-        { text: 'Eliminar con logs', style: 'destructive', onPress: () => resolve('with-logs') },
-      ]
-    );
-  });
-};
-
 // Result modal types
 type ResultType = 'success' | 'error' | 'warning' | 'info';
 interface ResultModalData {
@@ -166,6 +135,25 @@ export function ParticipantsSection() {
     type: 'info',
     title: '',
     message: '',
+  });
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    participantDni?: string;
+    participantName?: string;
+    isAll: boolean;
+    deleteLogs: boolean;
+    onConfirm: (deleteLogs: boolean) => void;
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+    isAll: false,
+    deleteLogs: false,
+    onConfirm: () => {},
   });
 
   // Helper to show result modal
@@ -534,46 +522,48 @@ export function ParticipantsSection() {
   };
 
   /**
-   * Delete participant
+   * Delete participant - shows modal to confirm and choose logs option
    */
-  const handleDeleteParticipant = async (dni: string, nombre: string) => {
+  const handleDeleteParticipant = (dni: string, nombre: string) => {
     if (!currentEvent) return;
 
-    const result = await showDeleteConfirm(
-      'Confirmar eliminación',
-      `¿Estás seguro de eliminar a ${nombre} (${dni})?\n\nEsta acción no se puede deshacer.`
-    );
-
-    if (result === 'cancel') return;
-
-    const deleteLogs = result === 'with-logs';
-
-    setLoading(true);
-    try {
-      const logsDeleted = await deleteParticipant(dni, currentEvent.id, deleteLogs);
-      showResult(
-        'success',
-        'Participante eliminado',
-        `${nombre} ha sido eliminado del evento.`,
-        [
-          `🆔 DNI: ${dni}`,
-          `📅 Evento: ${currentEvent.name}`,
-          deleteLogs
-            ? `🗑️ Logs eliminados: ${logsDeleted}`
-            : `📋 Logs de acceso mantenidos`,
-        ]
-      );
-      loadParticipants();
-    } catch (error: any) {
-      showResult(
-        'error',
-        'Error al eliminar',
-        `No se pudo eliminar a ${nombre} del evento.`,
-        [error.message || 'Error desconocido', 'Inténtalo de nuevo.']
-      );
-    } finally {
-      setLoading(false);
-    }
+    setDeleteModal({
+      visible: true,
+      title: 'Eliminar participante',
+      message: `¿Estás seguro de eliminar a ${nombre} (${dni})?\n\nEsta acción no se puede deshacer.`,
+      participantDni: dni,
+      participantName: nombre,
+      isAll: false,
+      onConfirm: async (deleteLogs: boolean) => {
+        setDeleteModal(prev => ({ ...prev, visible: false }));
+        setLoading(true);
+        try {
+          const logsDeleted = await deleteParticipant(dni, currentEvent.id, deleteLogs);
+          showResult(
+            'success',
+            'Participante eliminado',
+            `${nombre} ha sido eliminado del evento.`,
+            [
+              `🆔 DNI: ${dni}`,
+              `📅 Evento: ${currentEvent.name}`,
+              deleteLogs
+                ? `🗑️ Logs eliminados: ${logsDeleted}`
+                : `📋 Logs de acceso mantenidos`,
+            ]
+          );
+          loadParticipants();
+        } catch (error: any) {
+          showResult(
+            'error',
+            'Error al eliminar',
+            `No se pudo eliminar a ${nombre} del evento.`,
+            [error.message || 'Error desconocido', 'Inténtalo de nuevo.']
+          );
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
   };
 
   /**
@@ -803,9 +793,9 @@ export function ParticipantsSection() {
   };
 
   /**
-   * Delete all participants from the event
+   * Delete all participants from the event - shows modal to confirm and choose logs option
    */
-  const handleDeleteAllParticipants = async () => {
+  const handleDeleteAllParticipants = () => {
     if (!requireEvent('eliminar participantes')) {
       return;
     }
@@ -820,56 +810,45 @@ export function ParticipantsSection() {
       return;
     }
 
-    const result = await showDeleteConfirm(
-      '⚠️ Eliminar TODOS los participantes',
-      `¿Estás seguro de eliminar TODOS los ${participants.length} participantes del evento "${currentEvent.name}"?\n\n🚨 ESTA ACCIÓN ES IRREVERSIBLE 🚨`
-    );
-
-    if (result === 'cancel') return;
-
-    const deleteLogs = result === 'with-logs';
-
-    // Double confirmation for safety
-    const doubleConfirmed = await showConfirm(
-      '¿Estás completamente seguro?',
-      `Vas a eliminar ${participants.length} participantes${deleteLogs ? ' y todos sus logs de acceso' : ''}.\n\nEscribe mentalmente "ELIMINAR" para confirmar que entiendes las consecuencias.`,
-      'Sí, eliminar todo',
-      'No, cancelar',
-      true
-    );
-
-    if (!doubleConfirmed) return;
-
-    setLoading(true);
-    try {
-      const { participants: deletedCount, logs: logsDeleted } = await deleteAllParticipants(currentEvent.id, deleteLogs);
-      showResult(
-        'success',
-        'Participantes eliminados',
-        `Se han eliminado todos los participantes del evento.`,
-        [
-          `📅 Evento: ${currentEvent.name}`,
-          `🗑️ Participantes eliminados: ${deletedCount}`,
-          deleteLogs
-            ? `🗑️ Logs eliminados: ${logsDeleted}`
-            : `📋 Logs de acceso mantenidos`,
-          '⚠️ Esta acción no se puede deshacer',
-        ]
-      );
-      loadParticipants();
-    } catch (error: any) {
-      showResult(
-        'error',
-        'Error al eliminar',
-        'No se pudieron eliminar los participantes.',
-        [
-          error.message || 'Error desconocido',
-          'Inténtalo de nuevo o contacta soporte.',
-        ]
-      );
-    } finally {
-      setLoading(false);
-    }
+    setDeleteModal({
+      visible: true,
+      title: '⚠️ Eliminar TODOS los participantes',
+      message: `¿Estás seguro de eliminar TODOS los ${participants.length} participantes del evento "${currentEvent.name}"?\n\n🚨 ESTA ACCIÓN ES IRREVERSIBLE 🚨`,
+      isAll: true,
+      onConfirm: async (deleteLogs: boolean) => {
+        setDeleteModal(prev => ({ ...prev, visible: false }));
+        setLoading(true);
+        try {
+          const { participants: deletedCount, logs: logsDeleted } = await deleteAllParticipants(currentEvent.id, deleteLogs);
+          showResult(
+            'success',
+            'Participantes eliminados',
+            `Se han eliminado todos los participantes del evento.`,
+            [
+              `📅 Evento: ${currentEvent.name}`,
+              `🗑️ Participantes eliminados: ${deletedCount}`,
+              deleteLogs
+                ? `🗑️ Logs eliminados: ${logsDeleted}`
+                : `📋 Logs de acceso mantenidos`,
+              '⚠️ Esta acción no se puede deshacer',
+            ]
+          );
+          loadParticipants();
+        } catch (error: any) {
+          showResult(
+            'error',
+            'Error al eliminar',
+            'No se pudieron eliminar los participantes.',
+            [
+              error.message || 'Error desconocido',
+              'Inténtalo de nuevo o contacta soporte.',
+            ]
+          );
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
   };
 
   /**
@@ -1600,6 +1579,120 @@ export function ParticipantsSection() {
                 <Text style={styles.confirmModalButtonText}>
                   {sendingEmail ? 'Enviando...' : '📧 Enviar'}
                 </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete confirmation modal */}
+      <Modal
+        visible={deleteModal.visible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setDeleteModal(prev => ({ ...prev, visible: false }))}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.deleteConfirmModal, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
+            {/* Icon */}
+            <View style={[styles.deleteConfirmIconContainer, { backgroundColor: Colors.light.error + '20' }]}>
+              <Text style={styles.deleteConfirmIcon}>🗑️</Text>
+            </View>
+
+            {/* Title */}
+            <ThemedText style={styles.deleteConfirmTitle}>{deleteModal.title}</ThemedText>
+
+            {/* Message */}
+            <ThemedText style={styles.deleteConfirmMessage}>{deleteModal.message}</ThemedText>
+
+            {/* Logs option selector */}
+            <View style={styles.deleteConfirmOptionsSection}>
+              <Text style={[styles.deleteConfirmLogsTitle, { color: Colors[colorScheme ?? 'light'].text }]}>
+                ¿Qué hacer con los logs de acceso?
+              </Text>
+
+              {/* Option: Keep logs */}
+              <TouchableOpacity
+                style={[
+                  styles.deleteConfirmOption,
+                  {
+                    borderColor: !deleteModal.deleteLogs ? Colors.light.primary : Colors[colorScheme ?? 'light'].border,
+                    backgroundColor: !deleteModal.deleteLogs ? Colors.light.primary + '10' : 'transparent',
+                  },
+                ]}
+                onPress={() => setDeleteModal(prev => ({ ...prev, deleteLogs: false }))}
+              >
+                <View style={[
+                  styles.deleteConfirmRadio,
+                  {
+                    borderColor: !deleteModal.deleteLogs ? Colors.light.primary : Colors[colorScheme ?? 'light'].border,
+                  },
+                ]}>
+                  {!deleteModal.deleteLogs && (
+                    <View style={[styles.deleteConfirmRadioInner, { backgroundColor: Colors.light.primary }]} />
+                  )}
+                </View>
+                <View style={styles.deleteConfirmOptionTextContainer}>
+                  <Text style={[styles.deleteConfirmOptionTitle, { color: Colors[colorScheme ?? 'light'].text }]}>
+                    📋 Mantener logs
+                  </Text>
+                  <Text style={[styles.deleteConfirmOptionSubtitle, { color: Colors[colorScheme ?? 'light'].text }]}>
+                    El historial de entradas y salidas se conservará
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Option: Delete with logs */}
+              <TouchableOpacity
+                style={[
+                  styles.deleteConfirmOption,
+                  {
+                    borderColor: deleteModal.deleteLogs ? Colors.light.error : Colors[colorScheme ?? 'light'].border,
+                    backgroundColor: deleteModal.deleteLogs ? Colors.light.error + '10' : 'transparent',
+                  },
+                ]}
+                onPress={() => setDeleteModal(prev => ({ ...prev, deleteLogs: true }))}
+              >
+                <View style={[
+                  styles.deleteConfirmRadio,
+                  {
+                    borderColor: deleteModal.deleteLogs ? Colors.light.error : Colors[colorScheme ?? 'light'].border,
+                  },
+                ]}>
+                  {deleteModal.deleteLogs && (
+                    <View style={[styles.deleteConfirmRadioInner, { backgroundColor: Colors.light.error }]} />
+                  )}
+                </View>
+                <View style={styles.deleteConfirmOptionTextContainer}>
+                  <Text style={[styles.deleteConfirmOptionTitle, { color: Colors[colorScheme ?? 'light'].text }]}>
+                    🗑️ Eliminar con logs
+                  </Text>
+                  <Text style={[styles.deleteConfirmOptionSubtitle, { color: Colors[colorScheme ?? 'light'].text }]}>
+                    Se borrará todo el historial de acceso
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Action buttons */}
+            <View style={styles.deleteConfirmActions}>
+              <TouchableOpacity
+                style={[
+                  styles.deleteConfirmActionButton,
+                  { backgroundColor: deleteModal.deleteLogs ? Colors.light.error : Colors.light.warning },
+                ]}
+                onPress={() => deleteModal.onConfirm(deleteModal.deleteLogs)}
+              >
+                <Text style={styles.deleteConfirmActionButtonText}>
+                  {deleteModal.deleteLogs ? '🗑️ Eliminar todo' : '🗑️ Eliminar'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.deleteConfirmCancelButton, { borderColor: Colors[colorScheme ?? 'light'].border }]}
+                onPress={() => setDeleteModal(prev => ({ ...prev, visible: false }))}
+              >
+                <ThemedText style={styles.deleteConfirmCancelText}>Cancelar</ThemedText>
               </TouchableOpacity>
             </View>
           </View>
@@ -2376,6 +2469,105 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   resultCloseButtonText: {
+    fontWeight: '600',
+    fontSize: FontSizes.md,
+  },
+  // Delete confirmation modal styles
+  deleteConfirmModal: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    alignItems: 'center',
+  },
+  deleteConfirmIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  deleteConfirmIcon: {
+    fontSize: 32,
+  },
+  deleteConfirmTitle: {
+    fontSize: FontSizes.xl,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+  deleteConfirmMessage: {
+    fontSize: FontSizes.md,
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
+    opacity: 0.8,
+  },
+  deleteConfirmOptionsSection: {
+    width: '100%',
+    marginBottom: Spacing.lg,
+  },
+  deleteConfirmLogsTitle: {
+    fontSize: FontSizes.md,
+    fontWeight: '600',
+    marginBottom: Spacing.md,
+    textAlign: 'center',
+  },
+  deleteConfirmOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 2,
+    marginBottom: Spacing.sm,
+    gap: Spacing.md,
+  },
+  deleteConfirmRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteConfirmRadioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  deleteConfirmOptionTextContainer: {
+    flex: 1,
+  },
+  deleteConfirmOptionTitle: {
+    fontSize: FontSizes.md,
+    fontWeight: '600',
+  },
+  deleteConfirmOptionSubtitle: {
+    fontSize: FontSizes.sm,
+    opacity: 0.7,
+    marginTop: 2,
+  },
+  deleteConfirmActions: {
+    width: '100%',
+    gap: Spacing.sm,
+  },
+  deleteConfirmActionButton: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+  },
+  deleteConfirmActionButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: FontSizes.md,
+  },
+  deleteConfirmCancelButton: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  deleteConfirmCancelText: {
     fontWeight: '600',
     fontSize: FontSizes.md,
   },
