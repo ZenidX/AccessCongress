@@ -230,11 +230,18 @@ export function EventForm({
   };
 
   const toggleAccessMode = (mode: AccessMode) => {
-    setAccessModes((prev) =>
-      prev.includes(mode)
+    setAccessModes((prev) => {
+      const newModes = prev.includes(mode)
         ? prev.filter((m) => m !== mode)
-        : [...prev, mode]
-    );
+        : [...prev, mode];
+
+      // Clear error when at least one mode is selected
+      if (errors.accessModes && newModes.length > 0) {
+        setErrors((prevErrors) => ({ ...prevErrors, accessModes: '' }));
+      }
+
+      return newModes;
+    });
   };
 
   // Format date for display
@@ -257,6 +264,10 @@ export function EventForm({
     if (event.type === 'set' && selectedDate) {
       if (activeDateField === 'date') {
         setDate(selectedDate);
+        // Clear error when date is selected
+        if (errors.date) {
+          setErrors((prev) => ({ ...prev, date: '' }));
+        }
       } else {
         setEndDate(selectedDate);
       }
@@ -349,11 +360,27 @@ export function EventForm({
         {isEditing ? 'Editar Evento' : 'Crear Evento'}
       </Text>
 
+      {/* Validation errors summary */}
+      {Object.keys(errors).filter(k => errors[k]).length > 0 && (
+        <View style={[styles.errorSummary, { backgroundColor: colors.error + '15', borderColor: colors.error }]}>
+          <Text style={[styles.errorSummaryTitle, { color: colors.error }]}>
+            ⚠️ Por favor, corrige los siguientes errores:
+          </Text>
+          {Object.entries(errors).filter(([_, v]) => v).map(([key, value]) => (
+            <Text key={key} style={[styles.errorSummaryItem, { color: colors.error }]}>
+              • {value}
+            </Text>
+          ))}
+        </View>
+      )}
+
       {/* Admin Responsable Selector (for super_admin without organizationId) */}
       {/* Each admin_responsable IS an organization (their UID = organizationId) */}
       {isSuperAdmin() && !organizationId && !isEditing && (
         <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>Admin Responsable *</Text>
+          <Text style={[styles.label, { color: errors.organization ? colors.error : colors.text }]}>
+            Admin Responsable *
+          </Text>
           {loadingOrgs ? (
             <ActivityIndicator size="small" color={colors.primary} />
           ) : adminResponsables.length === 0 ? (
@@ -373,9 +400,15 @@ export function EventForm({
                       backgroundColor:
                         selectedOrgId === admin.uid ? colors.primary : colors.cardBackground,
                       borderColor: errors.organization ? colors.error : colors.border,
+                      borderWidth: errors.organization ? 2 : 1,
                     },
                   ]}
-                  onPress={() => setSelectedOrgId(admin.uid)}
+                  onPress={() => {
+                    setSelectedOrgId(admin.uid);
+                    if (errors.organization) {
+                      setErrors((prev) => ({ ...prev, organization: '' }));
+                    }
+                  }}
                 >
                   <Text
                     style={[
@@ -399,7 +432,9 @@ export function EventForm({
 
       {/* Name */}
       <View style={styles.field}>
-        <Text style={[styles.label, { color: colors.text }]}>Nombre *</Text>
+        <Text style={[styles.label, { color: errors.name ? colors.error : colors.text }]}>
+          Nombre *
+        </Text>
         <TextInput
           style={[
             styles.input,
@@ -407,10 +442,16 @@ export function EventForm({
               backgroundColor: colors.cardBackground,
               color: colors.text,
               borderColor: errors.name ? colors.error : colors.border,
+              borderWidth: errors.name ? 2 : 1,
             },
           ]}
           value={name}
-          onChangeText={setName}
+          onChangeText={(text) => {
+            setName(text);
+            if (errors.name && text.trim()) {
+              setErrors((prev) => ({ ...prev, name: '' }));
+            }
+          }}
           placeholder="Nombre del evento"
           placeholderTextColor={colors.text + '60'}
         />
@@ -466,17 +507,26 @@ export function EventForm({
       <View style={styles.datesRow}>
         {/* Start Date */}
         <View style={styles.dateFieldHalf}>
-          <Text style={[styles.label, { color: colors.text }]}>Fecha de inicio *</Text>
+          <Text style={[styles.label, { color: errors.date ? colors.error : colors.text }]}>
+            Fecha de inicio *
+          </Text>
           {Platform.OS === 'web' ? (
             <input
               type="date"
               value={date ? date.toISOString().split('T')[0] : ''}
-              onChange={(e) => setDate(e.target.value ? new Date(e.target.value) : null)}
+              onChange={(e) => {
+                const newDate = e.target.value ? new Date(e.target.value) : null;
+                setDate(newDate);
+                if (errors.date && newDate) {
+                  setErrors((prev) => ({ ...prev, date: '' }));
+                }
+              }}
               style={{
                 ...styles.webDateInput,
                 backgroundColor: colors.cardBackground,
                 color: colors.text,
                 borderColor: errors.date ? colors.error : colors.border,
+                borderWidth: errors.date ? 2 : 1,
               }}
             />
           ) : (
@@ -487,6 +537,7 @@ export function EventForm({
                 {
                   backgroundColor: colors.cardBackground,
                   borderColor: errors.date ? colors.error : colors.border,
+                  borderWidth: errors.date ? 2 : 1,
                 },
               ]}
               onPress={() => openDatePicker('date')}
@@ -605,7 +656,7 @@ export function EventForm({
 
       {/* Access Modes */}
       <View style={styles.field}>
-        <Text style={[styles.label, { color: colors.text }]}>
+        <Text style={[styles.label, { color: errors.accessModes ? colors.error : colors.text }]}>
           Modos de Acceso *
         </Text>
         {errors.accessModes && (
@@ -613,7 +664,10 @@ export function EventForm({
             {errors.accessModes}
           </Text>
         )}
-        <View style={styles.accessModesList}>
+        <View style={[
+          styles.accessModesList,
+          errors.accessModes && { borderWidth: 2, borderColor: colors.error, borderRadius: BorderRadius.md, padding: Spacing.xs }
+        ]}>
           {ACCESS_MODE_OPTIONS.map((option) => (
             <View
               key={option.value}
@@ -708,6 +762,23 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: FontSizes.sm,
     marginTop: 4,
+    fontWeight: '500',
+  },
+  errorSummary: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.lg,
+  },
+  errorSummaryTitle: {
+    fontSize: FontSizes.md,
+    fontWeight: 'bold',
+    marginBottom: Spacing.xs,
+  },
+  errorSummaryItem: {
+    fontSize: FontSizes.sm,
+    marginLeft: Spacing.xs,
+    marginTop: 2,
   },
   // Date picker styles
   dateButton: {
