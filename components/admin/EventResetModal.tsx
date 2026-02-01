@@ -16,6 +16,7 @@ import {
   Modal,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Colors, BorderRadius, Spacing, FontSizes, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -42,6 +43,27 @@ export function EventResetModal({
   const [resetting, setResetting] = useState(false);
   const [selectedType, setSelectedType] = useState<ResetType | null>(null);
 
+  const showAlert = (title: string, message: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}\n\n${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${title}\n\n${message}`)) {
+        onConfirm();
+      }
+    } else {
+      Alert.alert(title, message, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Confirmar', style: 'destructive', onPress: onConfirm },
+      ]);
+    }
+  };
+
   const handleReset = async (type: ResetType) => {
     if (!event) return;
 
@@ -51,48 +73,38 @@ export function EventResetModal({
         ? 'Se borrarán TODOS los estados de los participantes (registro, aula magna, master class, cena). Los logs de acceso se mantendrán.'
         : 'Se borrarán TODOS los estados de los participantes Y se eliminarán TODOS los logs de acceso (entradas y salidas). Esta acción no se puede deshacer.';
 
-    Alert.alert(
+    showConfirm(
       `Confirmar ${typeLabel}`,
       `${typeDescription}\n\n¿Estás seguro de continuar?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Confirmar',
-          style: 'destructive',
-          onPress: async () => {
-            setResetting(true);
-            setSelectedType(type);
+      async () => {
+        setResetting(true);
+        setSelectedType(type);
 
-            try {
-              let message: string;
-              let count: number;
+        try {
+          let message: string;
+          let count: number;
 
-              if (type === 'daily') {
-                count = await resetEventDaily(event.id);
-                message = `Se han reseteado ${count} participantes.`;
-              } else {
-                const result = await resetEventTotal(event.id);
-                count = result.participants;
-                message = `Se han reseteado ${result.participants} participantes y eliminado ${result.logs} registros de acceso.`;
-              }
+          if (type === 'daily') {
+            count = await resetEventDaily(event.id);
+            message = `Se han reseteado ${count} participantes.`;
+          } else {
+            const result = await resetEventTotal(event.id);
+            count = result.participants;
+            message = `Se han reseteado ${result.participants} participantes y eliminado ${result.logs} registros de acceso.`;
+          }
 
-              Alert.alert('Reset Completado', message);
+          showAlert('Reset Completado', message);
 
-              onResetComplete(type, count);
-              onClose();
-            } catch (error: any) {
-              console.error('Error during reset:', error);
-              Alert.alert(
-                'Error',
-                error.message || 'No se pudo completar el reset'
-              );
-            } finally {
-              setResetting(false);
-              setSelectedType(null);
-            }
-          },
-        },
-      ]
+          onResetComplete(type, count);
+          onClose();
+        } catch (error: any) {
+          console.error('Error during reset:', error);
+          showAlert('Error', error.message || 'No se pudo completar el reset');
+        } finally {
+          setResetting(false);
+          setSelectedType(null);
+        }
+      }
     );
   };
 

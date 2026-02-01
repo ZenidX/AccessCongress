@@ -142,8 +142,11 @@ service cloud.firestore {
         // Anyone who can access the event can create logs (scanning)
         allow create: if canAccessEvent(eventId);
 
-        // Logs should not be updated or deleted
-        allow update, delete: if false;
+        // Logs should not be updated
+        allow update: if false;
+
+        // Only admin roles can delete logs (for total reset)
+        allow delete: if isAnyAdmin() && canAccessEvent(eventId);
       }
 
       // ============================================
