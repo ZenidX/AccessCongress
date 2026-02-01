@@ -123,6 +123,9 @@ export default function DashboardScreen() {
   const [modalSearchText, setModalSearchText] = useState('');
   const [modalFilterMode, setModalFilterMode] = useState<AccessMode | 'todos'>('todos');
 
+  // Lista de TODOS los participantes registrados (para la modal)
+  const [allParticipants, setAllParticipants] = useState<Participant[]>([]);
+
   // Estado para el último resultado del scanner inline (web)
   const [lastScanResult, setLastScanResult] = useState<{
     success: boolean;
@@ -249,6 +252,22 @@ export default function DashboardScreen() {
       if (unsubscribe) unsubscribe();
     };
   }, [selectedMode, currentEvent?.id]);
+
+  /**
+   * Suscripción a TODOS los participantes registrados (para la modal)
+   * Independiente del modo seleccionado
+   */
+  useEffect(() => {
+    const eventId = currentEvent?.id;
+
+    const unsubscribe = subscribeToRegisteredParticipants((data) => {
+      setAllParticipants(data);
+    }, eventId);
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [currentEvent?.id]);
 
   /**
    * Suscripción a los últimos logs y carga de estadísticas
@@ -675,7 +694,10 @@ export default function DashboardScreen() {
                 {/* Indicadores - Clickeable para ver lista de participantes */}
                 <TouchableOpacity
                   style={styles.indicatorsRow}
-                  onPress={() => setShowParticipantsModal(true)}
+                  onPress={() => {
+                    setModalFilterMode(selectedMode);
+                    setShowParticipantsModal(true);
+                  }}
                   activeOpacity={0.8}
                 >
                   <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
@@ -826,7 +848,10 @@ export default function DashboardScreen() {
                           )}
                         </View>
                         <Text style={[styles.webTableCell, styles.webTableCellHora, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}>
-                          {new Date(log.timestamp).toLocaleTimeString('es-ES', {
+                          {new Date(log.timestamp).toLocaleString('es-ES', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
                             hour: '2-digit',
                             minute: '2-digit',
                           })}
@@ -985,7 +1010,10 @@ export default function DashboardScreen() {
               {/* Indicadores - Clickeable para ver lista de participantes */}
               <TouchableOpacity
                 style={styles.indicatorsRow}
-                onPress={() => setShowParticipantsModal(true)}
+                onPress={() => {
+                  setModalFilterMode(selectedMode);
+                  setShowParticipantsModal(true);
+                }}
                 activeOpacity={0.8}
               >
                 <View style={[styles.indicatorCard, { backgroundColor: selectedModeInfo?.color }]}>
@@ -1142,7 +1170,10 @@ export default function DashboardScreen() {
                             </View>
                           )}
                           <ThemedText style={styles.logTime}>
-                            {new Date(log.timestamp).toLocaleTimeString('es-ES', {
+                            {new Date(log.timestamp).toLocaleString('es-ES', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
                               hour: '2-digit',
                               minute: '2-digit',
                             })}
@@ -1271,7 +1302,7 @@ export default function DashboardScreen() {
             <Text style={[styles.modalResultsCount, { color: colorScheme === 'dark' ? '#aaa' : '#666' }]}>
               {(() => {
                 const searchLower = modalSearchText.toLowerCase().trim();
-                const filtered = participants.filter(p => {
+                const filtered = allParticipants.filter(p => {
                   // Filtro de modo
                   if (modalFilterMode !== 'todos') {
                     if (modalFilterMode === 'registro' && !p.estado?.registrado) return false;
@@ -1288,19 +1319,17 @@ export default function DashboardScreen() {
                   }
                   return true;
                 });
-                return `${filtered.length} de ${participants.length} participantes`;
+                return `${filtered.length} de ${allParticipants.length} participantes`;
               })()}
             </Text>
           </View>
 
           {/* Contenido del modal */}
-          {participants.length === 0 ? (
+          {allParticipants.length === 0 ? (
             <View style={styles.participantsModalEmpty}>
               <Text style={styles.participantsModalEmptyIcon}>📋</Text>
               <Text style={[styles.participantsModalEmptyText, { color: colorScheme === 'dark' ? '#ccc' : '#666' }]}>
-                {selectedMode === 'registro'
-                  ? 'No hay participantes registrados'
-                  : `No hay nadie en ${selectedModeInfo?.titulo}`}
+                No hay participantes registrados
               </Text>
             </View>
           ) : (
@@ -1316,7 +1345,7 @@ export default function DashboardScreen() {
                 </View>
 
               {/* Tabla rows */}
-              {participants
+              {allParticipants
                 .filter(p => {
                   // Filtro de modo
                   if (modalFilterMode !== 'todos') {
@@ -2152,8 +2181,8 @@ const styles = StyleSheet.create({
     minWidth: 100,
   },
   participantsTableCellUbicacion: {
-    flex: 1.5,
-    minWidth: 110,
+    flex: 1,
+    minWidth: 80,
     justifyContent: 'center',
   },
   ubicacionBadgesRow: {
