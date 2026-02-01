@@ -24,6 +24,7 @@ import {
   orderBy,
   limit,
   deleteDoc,
+  QueryConstraint,
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import {
@@ -766,24 +767,48 @@ export async function getRecentAccessLogs(
 
 /**
  * Subscribe to recent access logs in real-time
+ * @param modo - Access mode to filter by
+ * @param limitNum - Maximum number of logs to return (0 for no limit)
+ * @param callback - Callback function to receive logs
+ * @param eventId - Optional event ID
+ * @param startDate - Optional start date (timestamp) for filtering
+ * @param endDate - Optional end date (timestamp) for filtering
  */
 export function subscribeToRecentAccessLogs(
   modo: AccessMode,
   limitNum: number = 10,
   callback: (logs: AccessLog[]) => void,
-  eventId?: string
+  eventId?: string,
+  startDate?: number,
+  endDate?: number
 ): Unsubscribe {
   const collectionPath = eventId
     ? getAccessLogsCollection(eventId)
     : LEGACY_ACCESS_LOGS_COLLECTION;
 
-  const q = query(
-    collection(db, collectionPath),
+  // Build query constraints
+  const constraints: QueryConstraint[] = [
     where('modo', '==', modo),
     where('exito', '==', true),
-    orderBy('timestamp', 'desc'),
-    limit(limitNum)
-  );
+  ];
+
+  // Add date range filters if provided
+  if (startDate) {
+    constraints.push(where('timestamp', '>=', startDate));
+  }
+  if (endDate) {
+    constraints.push(where('timestamp', '<=', endDate));
+  }
+
+  // Always order by timestamp descending
+  constraints.push(orderBy('timestamp', 'desc'));
+
+  // Add limit if specified (0 means no limit)
+  if (limitNum > 0) {
+    constraints.push(limit(limitNum));
+  }
+
+  const q = query(collection(db, collectionPath), ...constraints);
 
   return onSnapshot(q, (snapshot) => {
     const logs = snapshot.docs.map((doc) => doc.data() as AccessLog);

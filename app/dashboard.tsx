@@ -143,6 +143,21 @@ export default function DashboardScreen() {
   const [recentLogs, setRecentLogs] = useState<AccessLog[]>([]);
   const [logsSearchText, setLogsSearchText] = useState('');
 
+  // Filtro de fecha para logs (por defecto: inicio de hoy)
+  const getStartOfDay = (date: Date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+  const getEndOfDay = (date: Date) => {
+    const d = new Date(date);
+    d.setHours(23, 59, 59, 999);
+    return d.getTime();
+  };
+  const [logsDateFilter, setLogsDateFilter] = useState<'hoy' | '7dias' | '30dias' | 'todo'>('hoy');
+  const [logsStartDate, setLogsStartDate] = useState<number>(getStartOfDay(new Date()));
+  const [logsEndDate, setLogsEndDate] = useState<number>(getEndOfDay(new Date()));
+
   // Recuentos totales de participantes por permiso
   const [potentialCounts, setPotentialCounts] = useState({
     registro: 0,
@@ -286,18 +301,29 @@ export default function DashboardScreen() {
     // Cargar estadísticas iniciales
     loadStats();
 
-    // Suscribirse a los últimos 10 accesos en tiempo real
-    // Cuando cambian los logs, recargar estadísticas
-    const unsubscribeLogs = subscribeToRecentAccessLogs(selectedMode, 10, (logs) => {
-      setRecentLogs(logs);
-      // Recargar estadísticas cuando llegan nuevos logs
-      loadStats();
-    }, eventId);
+    // Suscribirse a logs con filtro de fecha
+    // Cuando el filtro es 'todo', no se pasa límite ni fechas
+    const startDate = logsDateFilter === 'todo' ? undefined : logsStartDate;
+    const endDate = logsDateFilter === 'todo' ? undefined : logsEndDate;
+    const logLimit = logsDateFilter === 'todo' ? 100 : 0; // 0 = sin límite cuando hay filtro de fecha
+
+    const unsubscribeLogs = subscribeToRecentAccessLogs(
+      selectedMode,
+      logLimit,
+      (logs) => {
+        setRecentLogs(logs);
+        // Recargar estadísticas cuando llegan nuevos logs
+        loadStats();
+      },
+      eventId,
+      startDate,
+      endDate
+    );
 
     return () => {
       unsubscribeLogs();
     };
-  }, [selectedMode, currentEvent?.id]);
+  }, [selectedMode, currentEvent?.id, logsDateFilter, logsStartDate, logsEndDate]);
 
   /**
    * Cargar recuentos totales de permisos al montar y cuando cambie el evento
@@ -309,6 +335,36 @@ export default function DashboardScreen() {
   const handleRefresh = () => {
     setRefreshing(true);
     // La suscripción en tiempo real se encargará de actualizar
+  };
+
+  /**
+   * Cambiar el filtro de fecha para los logs
+   */
+  const handleDateFilterChange = (filter: 'hoy' | '7dias' | '30dias' | 'todo') => {
+    setLogsDateFilter(filter);
+    const now = new Date();
+
+    switch (filter) {
+      case 'hoy':
+        setLogsStartDate(getStartOfDay(now));
+        setLogsEndDate(getEndOfDay(now));
+        break;
+      case '7dias':
+        const weekAgo = new Date(now);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        setLogsStartDate(getStartOfDay(weekAgo));
+        setLogsEndDate(getEndOfDay(now));
+        break;
+      case '30dias':
+        const monthAgo = new Date(now);
+        monthAgo.setDate(monthAgo.getDate() - 30);
+        setLogsStartDate(getStartOfDay(monthAgo));
+        setLogsEndDate(getEndOfDay(now));
+        break;
+      case 'todo':
+        // No se aplica filtro de fecha
+        break;
+    }
   };
 
   /**
@@ -741,6 +797,37 @@ export default function DashboardScreen() {
                   {selectedMode === 'registro' ? 'Últimos registros' : 'Últimos accesos'}
                 </Text>
 
+                {/* Filtro de fecha */}
+                <View style={styles.dateFilterContainer}>
+                  {(['hoy', '7dias', '30dias', 'todo'] as const).map((filter) => (
+                    <TouchableOpacity
+                      key={filter}
+                      style={[
+                        styles.dateFilterButton,
+                        {
+                          backgroundColor: logsDateFilter === filter
+                            ? Colors.light.primary
+                            : (colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : '#f0f0f0'),
+                        },
+                      ]}
+                      onPress={() => handleDateFilterChange(filter)}
+                    >
+                      <Text
+                        style={[
+                          styles.dateFilterText,
+                          {
+                            color: logsDateFilter === filter
+                              ? '#fff'
+                              : (colorScheme === 'dark' ? '#ccc' : '#666'),
+                          },
+                        ]}
+                      >
+                        {filter === 'hoy' ? 'Hoy' : filter === '7dias' ? '7 días' : filter === '30dias' ? '30 días' : 'Todo'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
                 {/* Buscador de logs */}
                 <View style={[styles.logsSearchContainer, { backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : '#fff', borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.2)' : '#ddd' }]}>
                   <Text style={styles.logsSearchIcon}>🔍</Text>
@@ -764,9 +851,13 @@ export default function DashboardScreen() {
                   <View style={styles.emptyContainer}>
                     <Text style={styles.emptyIcon}>📋</Text>
                     <ThemedText style={styles.emptyText}>
-                      {selectedMode === 'registro'
-                        ? 'Aún no hay registros'
-                        : 'Aún no hay accesos registrados'}
+                      {logsDateFilter === 'hoy'
+                        ? 'No hay registros de hoy'
+                        : logsDateFilter === '7dias'
+                        ? 'No hay registros en los últimos 7 días'
+                        : logsDateFilter === '30dias'
+                        ? 'No hay registros en los últimos 30 días'
+                        : 'Aún no hay registros'}
                     </ThemedText>
                   </View>
                 ) : (
@@ -1055,6 +1146,37 @@ export default function DashboardScreen() {
                   {selectedMode === 'registro' ? 'Últimos registros' : 'Últimos accesos'}
                 </ThemedText>
 
+                {/* Filtro de fecha */}
+                <View style={styles.dateFilterContainer}>
+                  {(['hoy', '7dias', '30dias', 'todo'] as const).map((filter) => (
+                    <TouchableOpacity
+                      key={filter}
+                      style={[
+                        styles.dateFilterButton,
+                        {
+                          backgroundColor: logsDateFilter === filter
+                            ? Colors.light.primary
+                            : (colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : '#f0f0f0'),
+                        },
+                      ]}
+                      onPress={() => handleDateFilterChange(filter)}
+                    >
+                      <Text
+                        style={[
+                          styles.dateFilterText,
+                          {
+                            color: logsDateFilter === filter
+                              ? '#fff'
+                              : (colorScheme === 'dark' ? '#ccc' : '#666'),
+                          },
+                        ]}
+                      >
+                        {filter === 'hoy' ? 'Hoy' : filter === '7dias' ? '7 días' : filter === '30dias' ? '30 días' : 'Todo'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
                 {/* Buscador de logs */}
                 <View style={[styles.logsSearchContainer, { backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : '#fff', borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.2)' : '#ddd' }]}>
                   <Text style={styles.logsSearchIcon}>🔍</Text>
@@ -1078,9 +1200,13 @@ export default function DashboardScreen() {
                   <View style={styles.emptyContainer}>
                     <Text style={styles.emptyIcon}>📋</Text>
                     <ThemedText style={styles.emptyText}>
-                      {selectedMode === 'registro'
-                        ? 'Aún no hay registros'
-                        : 'Aún no hay accesos registrados'}
+                      {logsDateFilter === 'hoy'
+                        ? 'No hay registros de hoy'
+                        : logsDateFilter === '7dias'
+                        ? 'No hay registros en los últimos 7 días'
+                        : logsDateFilter === '30dias'
+                        ? 'No hay registros en los últimos 30 días'
+                        : 'Aún no hay registros'}
                     </ThemedText>
                   </View>
                 ) : (
@@ -2035,8 +2161,8 @@ const styles = StyleSheet.create({
   },
   // Anchos de columnas de tabla
   webTableCellNombre: {
-    flex: 1.5,
-    minWidth: 100,
+    flex: 1.2,
+    minWidth: 80,
   },
   webTableCellDni: {
     flex: 1,
@@ -2047,8 +2173,8 @@ const styles = StyleSheet.create({
     minWidth: 140,
   },
   webTableCellEntidad: {
-    flex: 1,
-    minWidth: 80,
+    flex: 0.8,
+    minWidth: 60,
   },
   webTableCellCargo: {
     flex: 1,
@@ -2062,7 +2188,7 @@ const styles = StyleSheet.create({
     borderRightColor: 'rgba(0,0,0,0.1)',
   },
   webTableCellHora: {
-    width: 70,
+    width: 130,
     textAlign: 'right',
     borderRightWidth: 0,
   },
@@ -2255,6 +2381,21 @@ const styles = StyleSheet.create({
   modalResultsCount: {
     fontSize: 12,
     textAlign: 'right',
+  },
+  // Filtro de fecha para logs
+  dateFilterContainer: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  dateFilterButton: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.pill,
+  },
+  dateFilterText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
   // Buscador de logs
   logsSearchContainer: {
