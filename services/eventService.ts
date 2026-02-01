@@ -237,46 +237,10 @@ export async function deleteEvent(eventId: string): Promise<void> {
 
 /**
  * Reset event - Daily reset
- * Keeps registrado = true
- * Sets en_aula_magna = false
- * Sets en_master_class = false
- * Does NOT touch en_cena
+ * Sets all estado fields to false (registrado, en_aula_magna, en_master_class, en_cena)
+ * Does NOT delete access logs
  */
 export async function resetEventDaily(eventId: string): Promise<number> {
-  const participantsRef = collection(db, getParticipantsPath(eventId));
-  const snapshot = await getDocs(participantsRef);
-
-  if (snapshot.empty) return 0;
-
-  // Process in batches of 500 (Firestore limit)
-  const batchSize = 500;
-  let processed = 0;
-
-  for (let i = 0; i < snapshot.docs.length; i += batchSize) {
-    const batch = writeBatch(db);
-    const chunk = snapshot.docs.slice(i, i + batchSize);
-
-    chunk.forEach((docSnap) => {
-      batch.update(docSnap.ref, {
-        'estado.en_aula_magna': false,
-        'estado.en_master_class': false,
-        ultima_actualizacion: Date.now(),
-      });
-    });
-
-    await batch.commit();
-    processed += chunk.length;
-  }
-
-  return processed;
-}
-
-/**
- * Reset event - Total reset
- * Sets all estado fields to false (registrado, en_aula_magna, en_master_class, en_cena)
- * Used when starting a completely new event
- */
-export async function resetEventTotal(eventId: string): Promise<number> {
   const participantsRef = collection(db, getParticipantsPath(eventId));
   const snapshot = await getDocs(participantsRef);
 
@@ -306,6 +270,66 @@ export async function resetEventTotal(eventId: string): Promise<number> {
   }
 
   return processed;
+}
+
+/**
+ * Reset event - Total reset
+ * Sets all estado fields to false AND deletes all access logs
+ * Used when you want to start fresh with all history cleared
+ */
+export async function resetEventTotal(eventId: string): Promise<{ participants: number; logs: number }> {
+  // 1. Reset all participant states
+  const participantsRef = collection(db, getParticipantsPath(eventId));
+  const participantsSnapshot = await getDocs(participantsRef);
+
+  let participantsProcessed = 0;
+
+  if (!participantsSnapshot.empty) {
+    const batchSize = 500;
+
+    for (let i = 0; i < participantsSnapshot.docs.length; i += batchSize) {
+      const batch = writeBatch(db);
+      const chunk = participantsSnapshot.docs.slice(i, i + batchSize);
+
+      chunk.forEach((docSnap) => {
+        batch.update(docSnap.ref, {
+          'estado.registrado': false,
+          'estado.en_aula_magna': false,
+          'estado.en_master_class': false,
+          'estado.en_cena': false,
+          timestamp_registro: null,
+          ultima_actualizacion: Date.now(),
+        });
+      });
+
+      await batch.commit();
+      participantsProcessed += chunk.length;
+    }
+  }
+
+  // 2. Delete all access logs
+  const logsRef = collection(db, getAccessLogsPath(eventId));
+  const logsSnapshot = await getDocs(logsRef);
+
+  let logsDeleted = 0;
+
+  if (!logsSnapshot.empty) {
+    const batchSize = 500;
+
+    for (let i = 0; i < logsSnapshot.docs.length; i += batchSize) {
+      const batch = writeBatch(db);
+      const chunk = logsSnapshot.docs.slice(i, i + batchSize);
+
+      chunk.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+
+      await batch.commit();
+      logsDeleted += chunk.length;
+    }
+  }
+
+  return { participants: participantsProcessed, logs: logsDeleted };
 }
 
 /**

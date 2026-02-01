@@ -3,8 +3,8 @@
  *
  * Modal for resetting event participant states.
  * Two types of reset:
- * - Daily Reset: Clears aula_magna, master_class, keeps registrado and cena
- * - Total Reset: Clears all states including registrado
+ * - Daily Reset: Clears all participant states (registrado, aula_magna, master_class, cena)
+ * - Total Reset: Clears all states AND deletes all access logs (entries/exits)
  */
 
 import React, { useState } from 'react';
@@ -48,8 +48,8 @@ export function EventResetModal({
     const typeLabel = type === 'daily' ? 'Reset Diario' : 'Reset Total';
     const typeDescription =
       type === 'daily'
-        ? 'Se limpiaran los estados de aula magna y master class. Se mantendra el registro y la cena.'
-        : 'Se limpiaran TODOS los estados de todos los participantes, incluyendo el registro.';
+        ? 'Se borrarán TODOS los estados de los participantes (registro, aula magna, master class, cena). Los logs de acceso se mantendrán.'
+        : 'Se borrarán TODOS los estados de los participantes Y se eliminarán TODOS los logs de acceso (entradas y salidas). Esta acción no se puede deshacer.';
 
     Alert.alert(
       `Confirmar ${typeLabel}`,
@@ -64,17 +64,19 @@ export function EventResetModal({
             setSelectedType(type);
 
             try {
+              let message: string;
               let count: number;
+
               if (type === 'daily') {
                 count = await resetEventDaily(event.id);
+                message = `Se han reseteado ${count} participantes.`;
               } else {
-                count = await resetEventTotal(event.id);
+                const result = await resetEventTotal(event.id);
+                count = result.participants;
+                message = `Se han reseteado ${result.participants} participantes y eliminado ${result.logs} registros de acceso.`;
               }
 
-              Alert.alert(
-                'Reset Completado',
-                `Se han actualizado ${count} participantes.`
-              );
+              Alert.alert('Reset Completado', message);
 
               onResetComplete(type, count);
               onClose();
@@ -144,14 +146,14 @@ export function EventResetModal({
                 </Text>
               </View>
               <Text style={[styles.optionDescription, { color: colors.text }]}>
-                Limpia los estados de ubicación (aula magna, master class).
+                Borra todos los estados de los participantes. Los logs se mantienen.
               </Text>
               <View style={styles.optionDetails}>
-                <Text style={[styles.optionDetail, { color: colors.success }]}>
-                  ✓ Mantiene: registrado, cena
-                </Text>
                 <Text style={[styles.optionDetail, { color: colors.error }]}>
-                  ✗ Limpia: en_aula_magna, en_master_class
+                  ✗ Borra: registrado, aula_magna, master_class, cena
+                </Text>
+                <Text style={[styles.optionDetail, { color: colors.success }]}>
+                  ✓ Mantiene: logs de acceso (entradas/salidas)
                 </Text>
               </View>
               {resetting && selectedType === 'daily' && (
@@ -179,11 +181,14 @@ export function EventResetModal({
                 </Text>
               </View>
               <Text style={[styles.optionDescription, { color: colors.text }]}>
-                Limpia TODOS los estados de todos los participantes.
+                Borra TODOS los estados Y elimina TODOS los logs de acceso.
               </Text>
               <View style={styles.optionDetails}>
                 <Text style={[styles.optionDetail, { color: colors.error }]}>
-                  ✗ Limpia: registrado, en_aula_magna, en_master_class, en_cena
+                  ✗ Borra: registrado, aula_magna, master_class, cena
+                </Text>
+                <Text style={[styles.optionDetail, { color: colors.error }]}>
+                  ✗ Elimina: todos los logs de entradas y salidas
                 </Text>
               </View>
               {resetting && selectedType === 'total' && (
