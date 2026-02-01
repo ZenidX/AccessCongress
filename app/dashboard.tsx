@@ -2169,16 +2169,16 @@ const styles = StyleSheet.create({
     minWidth: 80,
   },
   webTableCellEmail: {
-    flex: 2,
-    minWidth: 140,
+    flex: 1.5,
+    minWidth: 100,
   },
   webTableCellEntidad: {
     flex: 0.8,
-    minWidth: 60,
+    minWidth: 70,
   },
   webTableCellCargo: {
-    flex: 1,
-    minWidth: 80,
+    flex: 0.8,
+    minWidth: 70,
   },
   webTableCellDir: {
     width: 90,
@@ -2188,7 +2188,7 @@ const styles = StyleSheet.create({
     borderRightColor: 'rgba(0,0,0,0.1)',
   },
   webTableCellHora: {
-    width: 130,
+    width: 165,
     textAlign: 'right',
     borderRightWidth: 0,
   },
