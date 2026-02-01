@@ -133,22 +133,20 @@ export function EventForm({
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
+    // Validate organization for super_admin (must be first to check)
+    if (isSuperAdmin() && !isEditing) {
+      const orgId = organizationId || selectedOrgId || user?.organizationId;
+      if (!orgId) {
+        newErrors.organization = 'Selecciona una organización';
+      }
+    }
+
     if (!name.trim()) {
       newErrors.name = 'El nombre es obligatorio';
     }
 
     if (!date) {
-      newErrors.date = 'La fecha es obligatoria';
-    }
-
-    if (accessModes.length === 0) {
-      newErrors.accessModes = 'Selecciona al menos un modo de acceso';
-    }
-
-    // Validate organization for super_admin
-    const orgId = organizationId || selectedOrgId || user?.organizationId;
-    if (!orgId && !isEditing) {
-      newErrors.organization = 'Selecciona una organización';
+      newErrors.date = 'La fecha de inicio es obligatoria';
     }
 
     setErrors(newErrors);
@@ -655,18 +653,10 @@ export function EventForm({
 
       {/* Access Modes */}
       <View style={styles.field}>
-        <Text style={[styles.label, { color: errors.accessModes ? colors.error : colors.text }]}>
-          Modos de Acceso *
+        <Text style={[styles.label, { color: colors.text }]}>
+          Modos de Acceso
         </Text>
-        {errors.accessModes && (
-          <Text style={[styles.errorText, { color: colors.error }]}>
-            {errors.accessModes}
-          </Text>
-        )}
-        <View style={[
-          styles.accessModesList,
-          errors.accessModes && { borderWidth: 2, borderColor: colors.error, borderRadius: BorderRadius.md, padding: Spacing.xs }
-        ]}>
+        <View style={styles.accessModesList}>
           {ACCESS_MODE_OPTIONS.map((option) => (
             <View
               key={option.value}
