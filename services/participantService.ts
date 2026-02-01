@@ -102,12 +102,17 @@ export async function getAllParticipants(eventId?: string): Promise<Participant[
 }
 
 /**
- * Delete a participant and all their access logs
+ * Delete a participant and optionally their access logs
+ * @param dni - Participant DNI
+ * @param eventId - Event ID
+ * @param deleteLogs - Whether to also delete access logs (default: false)
+ * @returns Number of logs deleted (0 if deleteLogs is false)
  */
 export async function deleteParticipant(
   dni: string,
-  eventId?: string
-): Promise<void> {
+  eventId?: string,
+  deleteLogs: boolean = false
+): Promise<number> {
   try {
     const collectionPath = eventId
       ? getParticipantsCollection(eventId)
@@ -118,25 +123,32 @@ export async function deleteParticipant(
     await deleteDoc(docRef);
     console.log(`✅ Participant ${dni} deleted successfully`);
 
-    // Delete all access logs for this participant
-    const logsCollectionPath = eventId
-      ? getAccessLogsCollection(eventId)
-      : LEGACY_ACCESS_LOGS_COLLECTION;
+    let logsDeleted = 0;
 
-    const logsQuery = query(
-      collection(db, logsCollectionPath),
-      where('dni', '==', dni)
-    );
-    const logsSnapshot = await getDocs(logsQuery);
+    // Optionally delete all access logs for this participant
+    if (deleteLogs) {
+      const logsCollectionPath = eventId
+        ? getAccessLogsCollection(eventId)
+        : LEGACY_ACCESS_LOGS_COLLECTION;
 
-    if (!logsSnapshot.empty) {
-      const batch = writeBatch(db);
-      logsSnapshot.docs.forEach((logDoc) => {
-        batch.delete(logDoc.ref);
-      });
-      await batch.commit();
-      console.log(`✅ Deleted ${logsSnapshot.size} access logs for participant ${dni}`);
+      const logsQuery = query(
+        collection(db, logsCollectionPath),
+        where('dni', '==', dni)
+      );
+      const logsSnapshot = await getDocs(logsQuery);
+
+      if (!logsSnapshot.empty) {
+        const batch = writeBatch(db);
+        logsSnapshot.docs.forEach((logDoc) => {
+          batch.delete(logDoc.ref);
+        });
+        await batch.commit();
+        logsDeleted = logsSnapshot.size;
+        console.log(`✅ Deleted ${logsDeleted} access logs for participant ${dni}`);
+      }
     }
+
+    return logsDeleted;
   } catch (error) {
     console.error('Error deleting participant:', error);
     throw error;
@@ -1117,9 +1129,15 @@ export async function createParticipant(
 }
 
 /**
- * Delete all participants and their access logs for an event
+ * Delete all participants and optionally their access logs for an event
+ * @param eventId - Event ID
+ * @param deleteLogs - Whether to also delete access logs (default: false)
+ * @returns Object with participants and logs deleted counts
  */
-export async function deleteAllParticipants(eventId: string): Promise<number> {
+export async function deleteAllParticipants(
+  eventId: string,
+  deleteLogs: boolean = false
+): Promise<{ participants: number; logs: number }> {
   try {
     const batchSize = 500;
 
@@ -1145,29 +1163,31 @@ export async function deleteAllParticipants(eventId: string): Promise<number> {
       console.log(`✅ Deleted ${deletedParticipants} participants`);
     }
 
-    // 2. Delete all access logs for this event
-    const logsPath = getAccessLogsCollection(eventId);
-    const logsSnapshot = await getDocs(collection(db, logsPath));
-
+    // 2. Optionally delete all access logs for this event
     let deletedLogs = 0;
-    if (!logsSnapshot.empty) {
-      const logDocs = logsSnapshot.docs;
+    if (deleteLogs) {
+      const logsPath = getAccessLogsCollection(eventId);
+      const logsSnapshot = await getDocs(collection(db, logsPath));
 
-      for (let i = 0; i < logDocs.length; i += batchSize) {
-        const batch = writeBatch(db);
-        const chunk = logDocs.slice(i, Math.min(i + batchSize, logDocs.length));
+      if (!logsSnapshot.empty) {
+        const logDocs = logsSnapshot.docs;
 
-        chunk.forEach((document) => {
-          batch.delete(document.ref);
-        });
+        for (let i = 0; i < logDocs.length; i += batchSize) {
+          const batch = writeBatch(db);
+          const chunk = logDocs.slice(i, Math.min(i + batchSize, logDocs.length));
 
-        await batch.commit();
-        deletedLogs += chunk.length;
+          chunk.forEach((document) => {
+            batch.delete(document.ref);
+          });
+
+          await batch.commit();
+          deletedLogs += chunk.length;
+        }
+        console.log(`✅ Deleted ${deletedLogs} access logs`);
       }
-      console.log(`✅ Deleted ${deletedLogs} access logs`);
     }
 
-    return deletedParticipants;
+    return { participants: deletedParticipants, logs: deletedLogs };
   } catch (error) {
     console.error('Error deleting all participants:', error);
     throw error;

@@ -69,6 +69,37 @@ const showConfirm = async (
   });
 };
 
+// Cross-platform delete confirm with logs option
+// Returns: 'with-logs' | 'without-logs' | 'cancel'
+const showDeleteConfirm = async (
+  title: string,
+  message: string
+): Promise<'with-logs' | 'without-logs' | 'cancel'> => {
+  if (Platform.OS === 'web') {
+    const confirmDelete = window.confirm(`${title}\n\n${message}`);
+    if (!confirmDelete) return 'cancel';
+
+    const deleteLogs = window.confirm(
+      '¿Eliminar también los logs de acceso?\n\n' +
+      '• Aceptar: Eliminar participante(s) Y sus logs de acceso\n' +
+      '• Cancelar: Eliminar solo participante(s), mantener logs'
+    );
+    return deleteLogs ? 'with-logs' : 'without-logs';
+  }
+
+  return new Promise((resolve) => {
+    Alert.alert(
+      title,
+      message + '\n\n¿Qué deseas hacer con los logs de acceso?',
+      [
+        { text: 'Cancelar', style: 'cancel', onPress: () => resolve('cancel') },
+        { text: 'Mantener logs', style: 'default', onPress: () => resolve('without-logs') },
+        { text: 'Eliminar con logs', style: 'destructive', onPress: () => resolve('with-logs') },
+      ]
+    );
+  });
+};
+
 // Result modal types
 type ResultType = 'success' | 'error' | 'warning' | 'info';
 interface ResultModalData {
@@ -508,19 +539,18 @@ export function ParticipantsSection() {
   const handleDeleteParticipant = async (dni: string, nombre: string) => {
     if (!currentEvent) return;
 
-    const confirmed = await showConfirm(
+    const result = await showDeleteConfirm(
       'Confirmar eliminación',
-      `¿Estás seguro de eliminar a ${nombre} (${dni})?\n\nSe eliminarán también todos sus registros de acceso.\n\nEsta acción no se puede deshacer.`,
-      'Eliminar',
-      'Cancelar',
-      true
+      `¿Estás seguro de eliminar a ${nombre} (${dni})?\n\nEsta acción no se puede deshacer.`
     );
 
-    if (!confirmed) return;
+    if (result === 'cancel') return;
+
+    const deleteLogs = result === 'with-logs';
 
     setLoading(true);
     try {
-      await deleteParticipant(dni, currentEvent.id);
+      const logsDeleted = await deleteParticipant(dni, currentEvent.id, deleteLogs);
       showResult(
         'success',
         'Participante eliminado',
@@ -528,7 +558,9 @@ export function ParticipantsSection() {
         [
           `🆔 DNI: ${dni}`,
           `📅 Evento: ${currentEvent.name}`,
-          `📋 Registros de acceso eliminados`,
+          deleteLogs
+            ? `🗑️ Logs eliminados: ${logsDeleted}`
+            : `📋 Logs de acceso mantenidos`,
         ]
       );
       loadParticipants();
@@ -788,20 +820,19 @@ export function ParticipantsSection() {
       return;
     }
 
-    const confirmed = await showConfirm(
+    const result = await showDeleteConfirm(
       '⚠️ Eliminar TODOS los participantes',
-      `¿Estás seguro de eliminar TODOS los ${participants.length} participantes del evento "${currentEvent.name}"?\n\n🚨 ESTA ACCIÓN ES IRREVERSIBLE 🚨\n\nSe eliminarán permanentemente:\n• Todos los datos de participantes\n• Todo el historial de estados\n\nLos logs de acceso se mantendrán.`,
-      'Eliminar todo',
-      'Cancelar',
-      true
+      `¿Estás seguro de eliminar TODOS los ${participants.length} participantes del evento "${currentEvent.name}"?\n\n🚨 ESTA ACCIÓN ES IRREVERSIBLE 🚨`
     );
 
-    if (!confirmed) return;
+    if (result === 'cancel') return;
+
+    const deleteLogs = result === 'with-logs';
 
     // Double confirmation for safety
     const doubleConfirmed = await showConfirm(
       '¿Estás completamente seguro?',
-      `Vas a eliminar ${participants.length} participantes.\n\nEscribe mentalmente "ELIMINAR" para confirmar que entiendes las consecuencias.`,
+      `Vas a eliminar ${participants.length} participantes${deleteLogs ? ' y todos sus logs de acceso' : ''}.\n\nEscribe mentalmente "ELIMINAR" para confirmar que entiendes las consecuencias.`,
       'Sí, eliminar todo',
       'No, cancelar',
       true
@@ -811,7 +842,7 @@ export function ParticipantsSection() {
 
     setLoading(true);
     try {
-      const deletedCount = await deleteAllParticipants(currentEvent.id);
+      const { participants: deletedCount, logs: logsDeleted } = await deleteAllParticipants(currentEvent.id, deleteLogs);
       showResult(
         'success',
         'Participantes eliminados',
@@ -819,6 +850,9 @@ export function ParticipantsSection() {
         [
           `📅 Evento: ${currentEvent.name}`,
           `🗑️ Participantes eliminados: ${deletedCount}`,
+          deleteLogs
+            ? `🗑️ Logs eliminados: ${logsDeleted}`
+            : `📋 Logs de acceso mantenidos`,
           '⚠️ Esta acción no se puede deshacer',
         ]
       );
