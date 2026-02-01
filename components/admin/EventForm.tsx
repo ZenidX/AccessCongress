@@ -62,15 +62,6 @@ const ACCESS_MODE_OPTIONS: { value: AccessMode; label: string }[] = [
   { value: 'cena', label: 'Cena' },
 ];
 
-// Cross-platform alert helper
-const showAlert = (title: string, message: string) => {
-  if (Platform.OS === 'web') {
-    window.alert(`${title}\n\n${message}`);
-  } else {
-    Alert.alert(title, message);
-  }
-};
-
 export function EventForm({
   event,
   organizationId,
@@ -202,13 +193,11 @@ export function EventForm({
         };
 
         onSave(updatedEvent);
-        showAlert('Éxito', 'Evento actualizado correctamente');
       } else {
         // Create new event
         const orgId = organizationId || selectedOrgId || user?.organizationId;
-        console.log('Creating event with orgId:', orgId, 'selectedOrgId:', selectedOrgId);
         if (!orgId) {
-          showAlert('Error', 'No se pudo determinar la organización. Selecciona una organización o crea una nueva.');
+          setErrors(prev => ({ ...prev, organization: 'Selecciona una organización' }));
           setSaving(false);
           return;
         }
@@ -226,16 +215,14 @@ export function EventForm({
           },
         };
 
-        console.log('Creating event with data:', createData);
         const newEvent = await createEvent(createData, user?.uid ?? '');
-        console.log('Event created:', newEvent);
 
         onSave(newEvent);
-        showAlert('Éxito', 'Evento creado correctamente');
       }
     } catch (error: any) {
       console.error('Error saving event:', error);
-      showAlert('Error', error.message || 'No se pudo guardar el evento');
+      // Show error in a general error field
+      setErrors(prev => ({ ...prev, general: error.message || 'No se pudo guardar el evento' }));
     } finally {
       setSaving(false);
     }
