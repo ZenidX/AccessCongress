@@ -54,14 +54,12 @@ export async function createEvent(
   const eventRef = doc(collection(db, EVENTS_COLLECTION));
   const now = Date.now();
 
+  // Build event object, only including defined optional fields
   const event: Event = {
     id: eventRef.id,
     organizationId: data.organizationId,
     name: data.name,
-    description: data.description,
     date: data.date,
-    endDate: data.endDate,
-    location: data.location,
     status: data.status || 'draft',
     settings: {
       ...DEFAULT_EVENT_SETTINGS,
@@ -71,6 +69,11 @@ export async function createEvent(
     createdAt: now,
     updatedAt: now,
   };
+
+  // Only add optional fields if they have values (Firestore doesn't accept undefined)
+  if (data.description) event.description = data.description;
+  if (data.endDate) event.endDate = data.endDate;
+  if (data.location) event.location = data.location;
 
   await setDoc(eventRef, event);
   return event;
