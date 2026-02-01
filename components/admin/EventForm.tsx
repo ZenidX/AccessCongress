@@ -38,8 +38,8 @@ import {
 } from '@/types/event';
 import { AccessMode } from '@/types/participant';
 import { createEvent, updateEvent } from '@/services/eventService';
-import { User } from '@/types/user';
-import { getAllUsers } from '@/services/userService';
+import { Organization } from '@/types/organization';
+import { getAllOrganizations } from '@/services/organizationService';
 
 interface EventFormProps {
   event?: Event | null;
@@ -73,9 +73,8 @@ export function EventForm({
   const colors = Colors[colorScheme ?? 'light'];
   const isEditing = !!event;
 
-  // Admin responsables state (for super_admin)
-  // In this model, admin_responsable.uid IS the organizationId
-  const [adminResponsables, setAdminResponsables] = useState<User[]>([]);
+  // Organizations state (for super_admin)
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>(
     organizationId || event?.organizationId || ''
   );
@@ -90,25 +89,24 @@ export function EventForm({
     event?.settings?.accessModes ?? DEFAULT_EVENT_SETTINGS.accessModes
   );
 
-  // Load admin_responsables for super_admin (they ARE the organizations)
+  // Load organizations for super_admin
   useEffect(() => {
     if (isSuperAdmin() && !organizationId) {
-      loadAdminResponsables();
+      loadOrganizations();
     }
   }, []);
 
-  const loadAdminResponsables = async () => {
+  const loadOrganizations = async () => {
     setLoadingOrgs(true);
     try {
-      const allUsers = await getAllUsers();
-      const admins = allUsers.filter(u => u.role === 'admin_responsable');
-      setAdminResponsables(admins);
-      // If no org selected and we have admins, select the first one
-      if (!selectedOrgId && admins.length > 0) {
-        setSelectedOrgId(admins[0].uid);
+      const orgs = await getAllOrganizations();
+      setOrganizations(orgs);
+      // If no org selected and we have orgs, select the first one
+      if (!selectedOrgId && orgs.length > 0) {
+        setSelectedOrgId(orgs[0].id);
       }
     } catch (error) {
-      console.error('Error loading admin responsables:', error);
+      console.error('Error loading organizations:', error);
     } finally {
       setLoadingOrgs(false);
     }
@@ -374,37 +372,36 @@ export function EventForm({
         </View>
       )}
 
-      {/* Admin Responsable Selector (for super_admin without organizationId) */}
-      {/* Each admin_responsable IS an organization (their UID = organizationId) */}
+      {/* Organization Selector (for super_admin without organizationId) */}
       {isSuperAdmin() && !organizationId && !isEditing && (
         <View style={styles.field}>
           <Text style={[styles.label, { color: errors.organization ? colors.error : colors.text }]}>
-            Admin Responsable *
+            Organización *
           </Text>
           {loadingOrgs ? (
             <ActivityIndicator size="small" color={colors.primary} />
-          ) : adminResponsables.length === 0 ? (
+          ) : organizations.length === 0 ? (
             <View style={styles.noOrgContainer}>
               <Text style={[styles.noOrgText, { color: colors.text }]}>
-                No hay administradores responsables. Crea uno primero desde la sección de Usuarios.
+                No hay organizaciones. Crea una primero desde la sección de Organizaciones.
               </Text>
             </View>
           ) : (
             <View style={styles.orgSelector}>
-              {adminResponsables.map((admin) => (
+              {organizations.map((org) => (
                 <TouchableOpacity
-                  key={admin.uid}
+                  key={org.id}
                   style={[
                     styles.orgOption,
                     {
                       backgroundColor:
-                        selectedOrgId === admin.uid ? colors.primary : colors.cardBackground,
+                        selectedOrgId === org.id ? colors.primary : colors.cardBackground,
                       borderColor: errors.organization ? colors.error : colors.border,
                       borderWidth: errors.organization ? 2 : 1,
                     },
                   ]}
                   onPress={() => {
-                    setSelectedOrgId(admin.uid);
+                    setSelectedOrgId(org.id);
                     if (errors.organization) {
                       setErrors((prev) => ({ ...prev, organization: '' }));
                     }
@@ -413,10 +410,10 @@ export function EventForm({
                   <Text
                     style={[
                       styles.orgOptionText,
-                      { color: selectedOrgId === admin.uid ? '#fff' : colors.text },
+                      { color: selectedOrgId === org.id ? '#fff' : colors.text },
                     ]}
                   >
-                    {admin.email}
+                    {org.name}
                   </Text>
                 </TouchableOpacity>
               ))}
